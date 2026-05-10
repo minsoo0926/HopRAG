@@ -86,7 +86,11 @@ class QABuilder:
         logger.info(f"!!! starting creating online nodes called {self.label} for docs in {docs_dir}")
         if self.driver is None:
             self.driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password), database=neo4j_dbname, notifications_disabled_categories=neo4j_notification_filter)
-        docs_pool=os.listdir(docs_dir) 
+        docs_pool=os.listdir(docs_dir)
+        docs_pool = [x for x in docs_pool if x.endswith(".txt")]
+        # docs_pool = [x for x in docs_pool if x.endswith(".txt")]
+        docs_pool = docs_pool[:10]
+        print("DEBUG docs_pool size:", len(docs_pool))  
         docid2nodes={}
         node2questiondict={}
         with self.driver.session() as session:
@@ -96,7 +100,7 @@ class QABuilder:
                 try:
                     nodes_id=[]
                     doc_dir=os.path.join(docs_dir,doc_id)
-                    with open(doc_dir,'r') as f:
+                    with open(doc_dir,'r', encoding='utf-8') as f:
                         doc=f.read()
                         sentence2node=self.get_single_doc_qa(doc)
                         for text,tup in sentence2node.items():
@@ -108,14 +112,16 @@ class QABuilder:
                     docid2nodes[doc_id]=nodes_id
                 except Exception as e:
                     logger.info(f'error:{doc_id}——{e}')
-                    time.sleep(3)
+                    time.sleep(0)
                     continue
 
         return docid2nodes,node2questiondict# 
     
     def create_nodes_offline(self,docs_dir:str='/path/to/docs',start_index=0,span=100)->Tuple[Dict[str,List[int]],Dict[Tuple[int,str],Dict[str,List[Tuple[str,Set,np.ndarray]]]]]:
         logger.info(f" starting creating offline nodes called {self.label} for docs in {docs_dir} from index {start_index} to {start_index+span-1}")
-        docs_pool=os.listdir(docs_dir) 
+        docs_pool=os.listdir(docs_dir)
+        # docs_pool = docs_pool[:10]
+        # print("DEBUG docs_pool size:", len(docs_pool))  
         docid2nodes={}
         node2questiondict={}
         node_id=start_index*50 # assume 50 nodes for each previous doc to avoid node_id conflict
@@ -125,7 +131,7 @@ class QABuilder:
             try:
                 nodes_id=[]
                 doc_dir=os.path.join(docs_dir,doc_id)
-                with open(doc_dir,'r') as f:
+                with open(doc_dir,'r', encoding='utf-8') as f:
                     doc=f.read()
                     sentence2node=self.get_single_doc_qa(doc)
                     for text,tup in sentence2node.items():
@@ -148,7 +154,7 @@ class QABuilder:
             self.driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password), database=neo4j_dbname, notifications_disabled_categories=neo4j_notification_filter)
         with open(f'{cache_dir}/node2questiondict.pkl','rb') as f:
             old_node2questiondict=pickle.load(f) # please notice that old_node2questiondict from offline is (nodeid,docid) to nodedict
-        with open(f'{cache_dir}/docid2nodes.json','r') as f:
+        with open(f'{cache_dir}/docid2nodes.json','r', encoding='utf-8') as f:
             old_docid2nodes=json.load(f)
         new_node2questiondict={}
         new_docid2nodes={}
@@ -188,13 +194,36 @@ class QABuilder:
                     data.append({'doc_id':doc_id,'node_id':node_id,'question_label':question_label,'question_id':question_id,'embedding':emb,'question':question,'keywords':keywords})
                     # insert into table
         del node2questiondict
-        df=pd.DataFrame(data,columns=['doc_id','node_id','question_label','question_id','embedding','question','keywords'])
+        df = pd.DataFrame(
+            data,
+            columns=['doc_id', 'node_id', 'question_label', 'question_id', 'embedding', 'question', 'keywords']
+        )
         del data
-        sparse_similarities_result=sparse_similarities_df(df) # n**2 space complexity
-        answerable_df=df[df['question_label']=='answerable']
-        pending_df=df[df['question_label']=='pending']
+
+        print("DEBUG create_edge data size:", len(df))
+        if len(df) == 0:
+            print("DEBUG skip create_edge: empty df")
+            return
+
+        print("DEBUG columns:", list(df.columns))
+        print("DEBUG question_label counts:")
+        print(df["question_label"].value_counts() if "question_label" in df.columns else "no question_label")
+
+        answerable_df = df[df['question_label'] == 'answerable']
+        pending_df = df[df['question_label'] == 'pending']
+
+        print("DEBUG pending_df:", len(pending_df))
+        print("DEBUG answerable_df:", len(answerable_df))
+
+        if len(answerable_df) == 0 or len(pending_df) == 0:
+            print("DEBUG skip create_edge: empty pending or answerable")
+            return
+
+        sparse_similarities_result = sparse_similarities_df(df)
+
+        cartesian = pending_df.merge(answerable_df, how='cross')
+        print("DEBUG cartesian size:", len(cartesian))
         del df
-        cartesian=pending_df.merge(answerable_df,how='cross') # x:pending y:answerable
 
         dense_similarity=pending_dot_answerable(pending_df,answerable_df)
         del pending_df
@@ -249,7 +278,7 @@ class QABuilder:
 
 
     def create_edges_musique(self,node2questiondict,docid2nodes,problems_path="/path/to/musique/musique_problems.jsonl"):
-        with open(problems_path,'r') as f:
+        with open(problems_path,'r', encoding='utf-8') as f:
             problems=[json.loads(line) for line in f]
         id2txt=json.load(open(problems_path.replace('.jsonl','_id2txt.json'),'r')) # this file is created in process_data_musique in data_preprocess.py
         for problem in tqdm(problems,'create_edges_musique'): # 
@@ -260,7 +289,11 @@ class QABuilder:
             docs=[x+'.txt' for x in txts] # All the text documents corresponding to the question with this ID
             docid2nodes_={x:docid2nodes[x] for x in docs if x in docid2nodes}
             nodes=[(y,x) for x in docid2nodes_.keys() for y in docid2nodes_[x]]
-            node2questiondict_={(y,x):node2questiondict[(y,x)] for (y,x) in nodes} 
+            node2questiondict_={(y,x):node2questiondict[(y,x)] for (y,x) in nodes}
+            print("DEBUG problem id:", id)
+            print("DEBUG docs matched:", len(docid2nodes_))
+            print("DEBUG nodes matched:", len(nodes))
+            print("DEBUG node2questiondict matched:", len(node2questiondict_))
             try:
                 self.create_edge(node2questiondict_,docid2nodes_)
                 self.done.add(id)
@@ -269,8 +302,9 @@ class QABuilder:
                 continue
 
     def create_edges_hotpot(self,node2questiondict,docid2nodes,problems_path="/path/to/hotpotqa/hotpotqa_problems.jsonl"):
-        with open(problems_path,'r') as f:
+        with open(problems_path,'r', encoding='utf-8') as f:
             problems=[json.loads(line) for line in f]
+        problems = problems[:10]
         for problem in tqdm(problems,'create_edges'): 
             id=problem['_id']
             if id in self.done:
@@ -312,7 +346,7 @@ def main_nodes(cache_dir='quickstart_dataset/cache_hotpot',docs_dir="quickstart_
     start_time=time.time()
     print('start',time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
     if os.path.exists(f'{cache_dir}/docid2nodes.json'):
-        with open(f'{cache_dir}/docid2nodes.json','r') as f: 
+        with open(f'{cache_dir}/docid2nodes.json','r', encoding='utf-8') as f: 
             docid2nodes_old = json.load(f)
     else:
         docid2nodes_old={}
@@ -336,7 +370,7 @@ def main_nodes(cache_dir='quickstart_dataset/cache_hotpot',docs_dir="quickstart_
         pickle.dump(node2questiondict_old,f)
     del node2questiondict_old
     docid2nodes_old.update(docid2nodes)
-    with open(f'{cache_dir}/docid2nodes.json','w') as f:
+    with open(f'{cache_dir}/docid2nodes.json','w', encoding='utf-8') as f:
         json.dump(docid2nodes_old,f)
     del docid2nodes_old
     if builder.driver is not None:
@@ -352,7 +386,7 @@ def main_edges_index(cache_dir='quickstart_dataset/cache_hotpot',problems_path="
     start_time=time.time()
     print('start',time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
     if os.path.exists(f'{cache_dir}/docid2nodes.json'):
-        with open(f'{cache_dir}/docid2nodes.json','r') as f: 
+        with open(f'{cache_dir}/docid2nodes.json','r', encoding='utf-8') as f: 
             docid2nodes_old = json.load(f)
     else:
         docid2nodes_old={}
@@ -397,12 +431,21 @@ if __name__ == "__main__":
     #                start_index=0,span=12000,original_cache_dir='quickstart_dataset/cache_hotpot_offline')  
     
     # 2. hybrid mode is an alternative way to create nodes and edges in one step:
-    main_nodes(cache_dir='quickstart_dataset/cache_hotpot_online', docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
-     start_index=0,span=12000,offline=False,original_cache_dir=None)
+    # main_nodes(cache_dir='quickstart_dataset/cache_hotpot_online', docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
+    #  start_index=0,span=10,offline=False,original_cache_dir=None)
+    CACHE_DIR = "quickstart_dataset/cache_hotpot_qwen_edge_test_v3"
 
-
+    main_nodes(
+    cache_dir=CACHE_DIR,
+    docs_dir="quickstart_dataset/hotpot_example_docs",
+    label=node_name,
+    start_index=0,
+    span=10,
+    offline=False,
+    original_cache_dir=None
+)
     # for creating edges, it's much eaiser. first make sure creating nodes is finished and change dataset_name,node_name and edge_name in config.py
-    main_edges_index(cache_dir="quickstart_dataset/cache_hotpot_online",
+    main_edges_index(cache_dir=CACHE_DIR,
                      problems_path='quickstart_dataset/hotpot_example.jsonl',
                      label=node_name)
     

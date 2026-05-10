@@ -1,10 +1,15 @@
 neo4j_notification_filter = ["DEPRECATION"]
 exception_log_path = "exception_log.txt"
 embed_model = 'bge_en'
-embed_model_dict = {"bge_en":"/path/to/your/bge_base_en"} 
-local_model_name = "local_qwen_3_8b" # modelname from locally deployed vllm server
+embed_model_dict = {
+    "bge_en": "BAAI/bge-base-en-v1.5",
+}
+# local_model_name = "local_qwen_3_8b" # modelname from locally deployed vllm server
+# embed_dim = 768
+# llm_device='cpu'
+local_model_name = "qwen3:0.6b"   # Ollama model name
 embed_dim = 768
-llm_device='cuda:5'
+llm_device = "cpu"
 query_generator_model=local_model_name
 traversal_model=local_model_name
 
@@ -24,19 +29,35 @@ edge_sparse_index_name=generator_label+'edge_sparse_index'
 LOG = True
 DEBUG = False
 
-local_base =  'http://localhost:your_port/v1'
-local_key = "EMPTY"
+# local_base =  'http://localhost:your_port/v1'
+# local_key = "EMPTY"
+
+local_base = "http://localhost:11434/v1"
+local_key = "ollama"
 
 gpt_base = '' # don't add /chat/completions
 gpt_key = ''
 default_gpt_model = "gpt-4o-mini"
 
-deployment_sign = {"gpt":{"base":gpt_base,"key":gpt_key,"default_model":default_gpt_model},
-                   local_model_name:{"base":local_base,"key":local_key}}
+# deployment_sign = {"gpt":{"base":gpt_base,"key":gpt_key,"default_model":default_gpt_model},
+#                    local_model_name:{"base":local_base,"key":local_key}}
 
-neo4j_url = "bolt://localhost:7687"
+deployment_sign = {
+    "gpt": {
+        "base": gpt_base,
+        "key": gpt_key,
+        "default_model": default_gpt_model
+    },
+    local_model_name: {
+        "base": local_base,
+        "key": local_key
+    }
+}
+
+neo4j_uri = "neo4j://127.0.0.1:7687"
+neo4j_url = neo4j_uri
 neo4j_user = "neo4j"
-neo4j_password = "your_password"
+neo4j_password = "10451045"
 neo4j_dbname = "neo4j"
 print("dataset_name:",dataset_name,"node:",node_name," edge:",edge_name," embed model:",embed_model,"query_generator_model:",query_generator_model,"traversal_model:",traversal_model,"local_model_name:",local_model_name)
 # 'fixed' without summary ensures questions focus on the text itself; 'pending' without summary allows questions to explore other texts.
@@ -93,6 +114,12 @@ The followings are your Sentences of News:
 """
 
 title_template_eng="""
+/no_think
+Answer directly. Do not include thinking, reasoning, explanation, markdown, or code fences.
+Return only a valid JSON object in exactly this format:
+The format must be exactly:
+{{"Title":"<short English title>"}}
+
 You are a news editorial assistant skilled in titling documents, and you are proficient in two languages. Your task is to create a title in English for an English document. The title should be concise, clear, and accurately summarize the main theme of the news document. It should be engaging and make the reader want to read further.
 
 Note that the title should provide a summary of the content of the news document. It must cover the key subject and details of the news, encapsulating the theme, but avoid being overly detailed or abstract. The title should reflect the characteristics of a typical news headline—brief, straightforward, and capable of sparking the reader’s interest.

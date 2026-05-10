@@ -7,7 +7,7 @@ from config import *
 import torch
 import re
 import time
-from paddlenlp import Taskflow
+
 from sentence_transformers import SentenceTransformer
 from modelscope import AutoModelForCausalLM, AutoTokenizer,AutoModelForSequenceClassification
 import numpy as np
@@ -26,114 +26,300 @@ def try_run(func, *args, **kwargs):
             with open(exception_log_path, "a") as file:
                 file.write(f"Exception: {e}\n")
                 file.write(f"Commandline: {sys.argv}\n")
-            time.sleep(3)
+            time.sleep(0)
     else:
         with open(exception_log_path, "a") as file:
             file.write(f"--FAIL--\n")
             file.write(f"Commandline: {sys.argv}\n")
         #exit(555)
-        return None,None,None
+        return None,None
 
 def replace_newlines(match):
     # Replace \n and \r in the matched string
     return match.group(0).replace('\n', '\\n').replace('\r', '\\r')
 
+# def clean_json_str(json_str: str) -> str:
+#     """
+#     The generated JSON format may be non-standard, perform replacement processing first.
+#     :param json_str:
+#     :return:
+#     """
+#     # Remove code block markers ```
+#     # Replace None with null in the JSON string
+
+#     if "```json" not in json_str:
+#         index=json_str.index('{')
+#         json_str = json_str[index:]
+#         json_str = "```json"+json_str
+#     json_str = json_str.replace("None","null")
+#     if not json_str.startswith('```') and '```' in json_str:
+#         json_str = '```'+json_str.split('```')[1]
+#     json_str = json_str.split('}')[0]+'}'
+#     if json_str.startswith("```") and not json_str.endswith("```"):
+#         json_str += "```"
+#     match = re.search(r'```json(.*?)```', json_str, re.DOTALL)
+#     if match:
+#         json_str = match.group(1)
+#     match = re.search(r'```(.*?)```', json_str, re.DOTALL)
+#     if match:
+#         json_str = match.group(1)
+#     # Replace \n and \r in the matched string
+#     json_str = re.sub( r'("(?:\\.|[^"\\])*")', replace_newlines, json_str)
+#     # Remove trailing commas after key-value pairs
+#     json_str = re.sub(r',\s*}', '}', json_str)
+#     json_str = re.sub(r',\s*]', ']', json_str)
+#     # Restore the missing commas
+#     json_str = re.sub(r'\"\s+\"', '\",\"', json_str)
+#     # Inplacement of True and False
+#     json_str = json_str.replace("True","true")
+#     json_str = json_str.replace("False","false")
+#     return json_str
+
 def clean_json_str(json_str: str) -> str:
     """
-    The generated JSON format may be non-standard, perform replacement processing first.
-    :param json_str:
-    :return:
+    Robustly extract a JSON object from LLM output.
+    Works even if the model does not use ```json fences.
     """
-    # Remove code block markers ```
-    # Replace None with null in the JSON string
+    if json_str is None:
+        return ""
 
-    if "```json" not in json_str:
-        index=json_str.index('{')
-        json_str = json_str[index:]
-        json_str = "```json"+json_str
-    json_str = json_str.replace("None","null")
-    if not json_str.startswith('```') and '```' in json_str:
-        json_str = '```'+json_str.split('```')[1]
-    json_str = json_str.split('}')[0]+'}'
-    if json_str.startswith("```") and not json_str.endswith("```"):
-        json_str += "```"
-    match = re.search(r'```json(.*?)```', json_str, re.DOTALL)
-    if match:
-        json_str = match.group(1)
-    match = re.search(r'```(.*?)```', json_str, re.DOTALL)
-    if match:
-        json_str = match.group(1)
-    # Replace \n and \r in the matched string
-    json_str = re.sub( r'("(?:\\.|[^"\\])*")', replace_newlines, json_str)
-    # Remove trailing commas after key-value pairs
-    json_str = re.sub(r',\s*}', '}', json_str)
-    json_str = re.sub(r',\s*]', ']', json_str)
-    # Restore the missing commas
-    json_str = re.sub(r'\"\s+\"', '\",\"', json_str)
-    # Inplacement of True and False
-    json_str = json_str.replace("True","true")
-    json_str = json_str.replace("False","false")
+    json_str = str(json_str).strip()
+
+    # Remove Qwen-style thinking block if included in content.
+    json_str = re.sub(r"<think>.*?</think>", "", json_str, flags=re.DOTALL).strip()
+
+    # Remove markdown fences if present.
+    json_str = json_str.replace("```json", "").replace("```", "").strip()
+
+    # Normalize quotes sometimes produced by LLMs.
+    json_str = json_str.replace("“", '"').replace("”", '"').replace("`", "")
+
+    # Convert Python-style literals to JSON-style literals.
+    json_str = json_str.replace("None", "null")
+    json_str = json_str.replace("True", "true")
+    json_str = json_str.replace("False", "false")
+
+    # Extract first JSON object.
+    start = json_str.find("{")
+    end = json_str.rfind("}")
+
+    if start == -1 or end == -1 or end <= start:
+        return ""
+
+    json_str = json_str[start:end + 1]
+
+    # Remove trailing commas.
+    json_str = re.sub(r",\s*}", "}", json_str)
+    json_str = re.sub(r",\s*]", "]", json_str)
+
+    # Replace raw newlines inside strings.
+    json_str = re.sub(r'("(?:\\.|[^"\\])*")', replace_newlines, json_str)
+
     return json_str
 
-def txt2obj(text):  
-    try: 
-        text = clean_json_str(text) 
+# def txt2obj(text):  
+#     try: 
+#         text = clean_json_str(text) 
+#         text = text.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"').replace("\\'", "'")
+#         text = text.replace('`','').replace('“','"').replace('”','"')
+#         return json.loads(text) 
+#     except Exception as e:
+#         if LOG:
+#             print(e)
+#         return None
+
+def txt2obj(text):
+    try:
+        text = clean_json_str(text)
+
+        if not text:
+            return None
+
         text = text.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"').replace("\\'", "'")
-        text = text.replace('`','').replace('“','"').replace('”','"')
-        return json.loads(text) 
+        return json.loads(text)
+
     except Exception as e:
         if LOG:
-            print(e)
+            print("txt2obj error:", e)
+            print("raw response:", text)
         return None
 
 
 
 
-def get_title_keywords_eng(title_template, doc,query_generator)->Tuple[str,Set[str]]:
-    chat = []
-    chat.append({"role": "user", "content": title_template.format(doc_content=doc)})
-    title, chat = get_chat_completion(chat, keys=["Title"],model=query_generator,max_tokens=4096)
-    if len(title)==0:
-        title=doc[:20]
-    keywords=get_ner_eng(title)
-    if len(keywords)==0:
-        keywords=title.replace(',',"").replace('，',"").replace('。','').replace('.','')
-        keywords=set(keywords)
-        return title,keywords
-    return title,set(keywords)
+# def get_title_keywords_eng(title_template, doc,query_generator)->Tuple[str,Set[str]]:
+#     chat = []
+#     chat.append({"role": "user", "content": title_template.format(doc_content=doc)})
+#     title, chat = get_chat_completion(chat, keys=["Title"],model=query_generator,max_tokens=4096)
+#     if len(title)==0:
+#         title=doc[:20]
+#     keywords=get_ner_eng(title)
+#     if len(keywords)==0:
+#         keywords=title.replace(',',"").replace('，',"").replace('。','').replace('.','')
+#         keywords=set(keywords)
+#         return title,keywords
+#     return title,set(keywords)
 
-def get_question_list(extract_template, sentences,query_generator)->List[str]:
-    chat = []
-    chat.append({"role": "user", "content": extract_template.format(sentences=sentences)})
-    question_list, chat = get_chat_completion(chat, keys=["Question List"],model=query_generator,max_tokens=4096)
-    return question_list
+# def get_title_keywords_eng(title_template, doc, query_generator) -> Tuple[str, Set[str]]:
+#     chat = []
+#     chat.append({"role": "user", "content": title_template.format(doc_content=doc)})
 
+#     title, chat = get_chat_completion(
+#         chat,
+#         keys=["Title"],
+#         model=query_generator,
+#         # max_tokens=4096
+#         max_tokens = 512
+#     )
+
+#     # Fallback if Qwen output parsing failed
+#     if title is None:
+#         title = doc[:80].replace("\n", " ").strip()
+
+#     if isinstance(title, list):
+#         title = title[0] if len(title) > 0 else doc[:80].replace("\n", " ").strip()
+
+#     title = str(title).strip()
+
+#     if len(title) == 0:
+#         title = doc[:80].replace("\n", " ").strip()
+
+#     keywords = get_ner_eng(title)
+
+#     if len(keywords) == 0:
+#         keywords = title.replace(",", " ").replace("，", " ").replace("。", " ").replace(".", " ").split()
+
+#     return title, set(keywords)
+
+def get_title_keywords_eng(title_template, doc, query_generator) -> Tuple[str, Set[str]]:
+    # Debug / local-small-model mode:
+    # Do not call LLM for title generation.
+    title = doc[:80].replace("\n", " ").strip()
+
+    if len(title) == 0:
+        title = "untitled document"
+
+    keywords = get_ner_eng(title)
+
+    if len(keywords) == 0:
+        keywords = title.replace(",", " ").replace("，", " ").replace("。", " ").replace(".", " ").split()
+
+    return title, set(keywords)
+
+# def get_question_list(extract_template, sentences,query_generator)->List[str]:
+#     chat = []
+#     chat.append({"role": "user", "content": extract_template.format(sentences=sentences)})
+#     question_list, chat = get_chat_completion(chat, keys=["Question List"],model=query_generator,max_tokens=4096)
+#     return question_list
+
+# def get_question_list(extract_template, sentences, query_generator) -> List[str]:
+#     # Debug / local-small-model mode:
+#     # Do not call LLM, but return one dummy question so that HopBuilder creates nodes.
+#     if isinstance(sentences, list):
+#         text = " ".join(sentences)
+#     else:
+#         text = str(sentences)
+
+#     text = text.replace("\n", " ").strip()
+
+#     if len(text) == 0:
+#         return ["What information is provided in this passage?"]
+
+#     short_text = text[:120]
+#     return [f"What information is provided in this passage about {short_text}?"]
+
+def get_question_list(extract_template, sentences, query_generator) -> List[str]:
+    if isinstance(sentences, list):
+        text = " ".join(sentences)
+    else:
+        text = str(sentences)
+
+    text = text.replace("\n", " ").strip()
+
+    if len(text) == 0:
+        return ["What information is provided in this passage?"]
+
+    # 너무 긴 prompt를 막기 위해 잘라줌
+    text = text[:800]
+
+    prompt = f"""
+/no_think
+Generate exactly two simple factual questions about the passage.
+Return only a valid JSON object.
+Do not include thinking, reasoning, explanation, markdown, or code fences.
+The format must be exactly:
+{{"Question List":["question 1","question 2"]}}
+
+Passage:
+{text}
+"""
+
+    chat = [{"role": "user", "content": prompt}]
+
+    question_list, chat = get_chat_completion(
+        chat,
+        keys=["Question List"],
+        model=query_generator,
+        max_tokens=256
+    )
+
+    if question_list is None:
+        return [f"What information is provided in this passage about {text[:120]}?"]
+
+    if isinstance(question_list, str):
+        question_list = [question_list]
+
+    if not isinstance(question_list, list) or len(question_list) == 0:
+        return [f"What information is provided in this passage about {text[:120]}?"]
+
+    return [str(q).strip() for q in question_list if str(q).strip()][:2]
+
+# def get_ner_eng(text):
+#     from paddlenlp import Taskflow
+#     ner_task = Taskflow("pos_tagging")
+#     results = ner_task(text)
+#     filtered = []
+#     for result in results:
+#         entity, mode = result
+#         if mode not in [
+#             "w",  # Punctuation marks
+#             "c",  # Conjunctions
+#             "f",  # Directional words
+#             "ad", # Adverbs
+#             "q",  # Quantifiers
+#             "u",  # Particles
+#             "s",  # Locative words
+#             "vd", # Verbal adverbs
+#             "an", # Noun-adjective compound
+#             "r",  # Pronouns
+#             "xc", # Other function words
+#             "vn", # Noun-verb compounds
+#             "d",  # Adverbs
+#             "p",  # Prepositions
+#         ]:
+#             filtered.append(entity)
+#     filtered = list(set(filtered))
+#     return filtered
 
 def get_ner_eng(text):
-    ner_task = Taskflow("pos_tagging")
-    results = ner_task(text)
-    filtered = []
-    for result in results:
-        entity, mode = result
-        if mode not in [
-            "w",  # Punctuation marks
-            "c",  # Conjunctions
-            "f",  # Directional words
-            "ad", # Adverbs
-            "q",  # Quantifiers
-            "u",  # Particles
-            "s",  # Locative words
-            "vd", # Verbal adverbs
-            "an", # Noun-adjective compound
-            "r",  # Pronouns
-            "xc", # Other function words
-            "vn", # Noun-verb compounds
-            "d",  # Adverbs
-            "p",  # Prepositions
-        ]:
-            filtered.append(entity)
-    filtered = list(set(filtered))
-    return filtered
+
+    text = str(text)
+    words = re.findall(r"[A-Za-z][A-Za-z0-9'-]+", text)
+
+    # 너무 짧은 단어 제거
+    stopwords = {
+        "the", "and", "for", "with", "from", "that", "this", "are", "was",
+        "were", "his", "her", "its", "into", "about", "after", "before",
+        "which", "what", "when", "where", "who", "how", "why", "has", "had"
+    }
+
+    keywords = []
+    for w in words:
+        lw = w.lower()
+        if len(lw) >= 3 and lw not in stopwords:
+            keywords.append(w)
+
+    return keywords[:20]
 
 def load_embed_model(model_name):
     if model_name in embed_model_dict:
@@ -167,6 +353,7 @@ def get_doc_embeds(documents, model):
     return embeddings
 
 def _get_chat_completion(chat, return_json=True, model=default_gpt_model, max_tokens=4096, keys=None):
+    print("LLM CALLED:", model)
     if not isinstance(chat, list):
         chat = [{"role": "user", "content": chat}]
     local_deployed = False
@@ -212,9 +399,30 @@ def _get_chat_completion(chat, return_json=True, model=default_gpt_model, max_to
         raise NotImplementedError
     if not return_json:
         return response, chat
+    # obj = txt2obj(response)
+    # obj = tuple([obj[key] for key in keys if key in obj]) #
+    # return *obj, chat
     obj = txt2obj(response)
-    obj = tuple([obj[key] for key in keys if key in obj]) #
-    return *obj, chat
+
+    if keys is None:
+        return obj, chat
+
+    if obj is None or not isinstance(obj, dict):
+        return *([None] * len(keys)), chat
+
+    values = []
+    for key in keys:
+        # 혹시 key가 '"Title"'처럼 들어오는 경우도 방어
+        normalized_key = str(key).strip().strip('"').strip("'")
+
+        if normalized_key in obj:
+            values.append(obj[normalized_key])
+        elif key in obj:
+            values.append(obj[key])
+        else:
+            values.append(None)
+
+    return *values, chat
 
 def get_chat_completion(chat, return_json=True, model=default_gpt_model, max_tokens=4096, keys=None):
     return try_run(_get_chat_completion, chat, return_json, model, max_tokens, keys)
