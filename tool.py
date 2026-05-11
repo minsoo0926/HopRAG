@@ -7,7 +7,9 @@ from config import *
 import torch
 import re
 import time
-from paddlenlp import Taskflow
+import nltk
+nltk.download('averaged_perceptron_tagger_eng', quiet=True)
+nltk.download('punkt_tab', quiet=True)
 from sentence_transformers import SentenceTransformer
 from modelscope import AutoModelForCausalLM, AutoTokenizer,AutoModelForSequenceClassification
 import numpy as np
@@ -110,30 +112,11 @@ def get_question_list(extract_template, sentences,query_generator)->List[str]:
 
 
 def get_ner_eng(text):
-    ner_task = Taskflow("pos_tagging")
-    results = ner_task(text)
-    filtered = []
-    for result in results:
-        entity, mode = result
-        if mode not in [
-            "w",  # Punctuation marks
-            "c",  # Conjunctions
-            "f",  # Directional words
-            "ad", # Adverbs
-            "q",  # Quantifiers
-            "u",  # Particles
-            "s",  # Locative words
-            "vd", # Verbal adverbs
-            "an", # Noun-adjective compound
-            "r",  # Pronouns
-            "xc", # Other function words
-            "vn", # Noun-verb compounds
-            "d",  # Adverbs
-            "p",  # Prepositions
-        ]:
-            filtered.append(entity)
-    filtered = list(set(filtered))
-    return filtered
+    tokens = nltk.word_tokenize(text)
+    tagged = nltk.pos_tag(tokens)
+    keep_tags = {'NN','NNS','NNP','NNPS','VB','VBD','VBG','VBN','VBP','VBZ','JJ','JJR','JJS','CD'}
+    filtered = [word for word, tag in tagged if tag in keep_tags and len(word) > 1]
+    return list(set(filtered))
 
 def load_embed_model(model_name):
     if model_name in embed_model_dict:
@@ -181,7 +164,6 @@ def _get_chat_completion(chat, return_json=True, model=default_gpt_model, max_to
         chat_completion = client.chat.completions.create(model=model,
                                                    messages=chat,
                                                    response_format={"type": "json_object" if return_json else "text"},
-                                                   extra_body={"chat_template_kwargs": {"enable_thinking": False}}, # for qwen3 series
                                                    max_tokens=max_tokens,
                                                    temperature=0.1,
                                                    frequency_penalty=0.0,
