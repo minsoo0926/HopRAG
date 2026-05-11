@@ -262,7 +262,20 @@ def main_hotpot(args):
         rag_pipeline.retriever.driver=None
 
 if __name__ == "__main__":
-    # before starting, pay attn to embed_model and cuda_device in config.py 
+    # before starting, pay attn to embed_model and cuda_device in config.py
+    # python3 HopGenerator.py \
+    #   --model_name 'gpt-4o-mini' \          # LLM for answer generation
+    #   --data_path 'quickstart_dataset/hotpot_example.jsonl' \   # input queries
+    #   --save_dir 'quickstart_dataset/hotpot_output' \           # output directory
+    #   --retriever_name 'HopRetriever' \
+    #   --max_hop 4 \                          # max graph hops per query
+    #   --topk 10 \                            # top-k nodes to retrieve
+    #   --traversal 'hopq' \                   # traversal strategy
+    #   --epsilon 0.3 \                        # explore(1) vs exploit(0) balance
+    #   --hybrid \                             # use hybrid (dense+sparse) for entry node
+    #   --entry_type 'node' \                  # start retrieval from node index
+    #   --mode 'common' \                      # common: retrieve then generate
+    #   --label 'hotpot_hopq'                  # output dir label
     args = parser.parse_args()
     logger.info(f"Arguments: {args}")
     if 'musique' in args.data_path:
