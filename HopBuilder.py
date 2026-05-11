@@ -87,9 +87,10 @@ class QABuilder:
         if self.driver is None:
             self.driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password), database=neo4j_dbname, notifications_disabled_categories=neo4j_notification_filter)
         docs_pool=os.listdir(docs_dir)
-        docs_pool = [x for x in docs_pool if x.endswith(".txt")]
         # docs_pool = [x for x in docs_pool if x.endswith(".txt")]
-        docs_pool = docs_pool[:10]
+        docs_pool = sorted([x for x in docs_pool if x.endswith(".txt")])
+        # docs_pool = [x for x in docs_pool if x.endswith(".txt")]
+        # docs_pool = docs_pool[:10]
         print("DEBUG docs_pool size:", len(docs_pool))  
         docid2nodes={}
         node2questiondict={}
@@ -237,7 +238,25 @@ class QABuilder:
         cartesian1=cartesian.loc[idx] 
         cartesian2=cartesian.loc[cartesian['doc_id_x']!=cartesian['doc_id_y']] # To avoid building edges all within the same document, a fallback edge creation step ensures different documents. However, the final similarity trimming is done together with edges from the same document (the downside is that this part tends to retain fewer edges)
         del cartesian,idx
-        cartesian1['keywords_both']=cartesian1.apply(lambda x:x['keywords_x'].union(x['keywords_y']),axis=1) # try cartesian1.swifter.apply for faster speed with package swifter
+        # cartesian1['keywords_both']=cartesian1.apply(lambda x:x['keywords_x'].union(x['keywords_y']),axis=1) # try cartesian1.swifter.apply for faster speed with package swifter
+        def to_keyword_set(x):
+            if isinstance(x, set):
+                return x
+            if isinstance(x, list):
+                return set(x)
+            if isinstance(x, tuple):
+                return set(x)
+            if isinstance(x, str):
+                return set(x.split())
+            return set()
+
+        def merge_keywords(a, b):
+            return to_keyword_set(a).union(to_keyword_set(b))
+        
+        cartesian1["keywords_both"] = [
+            merge_keywords(a, b)
+            for a, b in zip(cartesian1["keywords_x"], cartesian1["keywords_y"])
+]
         self.edges=cartesian1[['node_id_x','question_y','keywords_both','embedding_x','node_id_y','similarity']] # Edges should retain those pointing to the question
         self.abstract2chunk=answerable_df.loc[~answerable_df['question'].isin(cartesian1['question_y']) & ~answerable_df['question'].isin(cartesian2['question_y'])] # No answerable questions that match any follow-up questions
         del answerable_df,cartesian1
@@ -246,7 +265,11 @@ class QABuilder:
         idx = cartesian2.groupby('question_x').head(2).index # Encourage multiple hops between documents, so the value here is 2
         cartesian2=cartesian2.loc[idx]
         del idx
-        cartesian2['keywords_both']=cartesian2.apply(lambda x:x['keywords_x'].union(x['keywords_y']),axis=1) # try cartesian2.swifter.apply for faster speed with package swifter
+        # cartesian2['keywords_both']=cartesian2.apply(lambda x:x['keywords_x'].union(x['keywords_y']),axis=1) # try cartesian2.swifter.apply for faster speed with package swifter
+        cartesian2["keywords_both"] = [
+            merge_keywords(a, b)
+            for a, b in zip(cartesian2["keywords_x"], cartesian2["keywords_y"])
+        ]
 
         max_edges_num=1000000000
         cartesian2=cartesian2.sort_values(by='similarity',ascending=False).drop_duplicates(subset=['node_id_x','node_id_y'],keep='first')
@@ -304,7 +327,7 @@ class QABuilder:
     def create_edges_hotpot(self,node2questiondict,docid2nodes,problems_path="/path/to/hotpotqa/hotpotqa_problems.jsonl"):
         with open(problems_path,'r', encoding='utf-8') as f:
             problems=[json.loads(line) for line in f]
-        problems = problems[:10]
+        # problems = problems[:10]
         for problem in tqdm(problems,'create_edges'): 
             id=problem['_id']
             if id in self.done:
@@ -359,7 +382,7 @@ def main_nodes(cache_dir='quickstart_dataset/cache_hotpot',docs_dir="quickstart_
             docid2nodes,node2questiondict=builder.create_nodes(docs_dir)
     else:
         docid2nodes,node2questiondict=builder.create_nodes_cache(original_cache_dir)###
-    print(docid2nodes)#  
+    # print(docid2nodes)#  
     if os.path.exists(f'{cache_dir}/node2questiondict.pkl'):
         with open (f'{cache_dir}/node2questiondict.pkl','rb') as f:
             node2questiondict_old=pickle.load(f)
@@ -433,14 +456,14 @@ if __name__ == "__main__":
     # 2. hybrid mode is an alternative way to create nodes and edges in one step:
     # main_nodes(cache_dir='quickstart_dataset/cache_hotpot_online', docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
     #  start_index=0,span=10,offline=False,original_cache_dir=None)
-    CACHE_DIR = "quickstart_dataset/cache_hotpot_qwen_edge_test_v3"
+    CACHE_DIR = "quickstart_dataset/cache_hotpot_qwen_edge_full_v3"
 
     main_nodes(
     cache_dir=CACHE_DIR,
     docs_dir="quickstart_dataset/hotpot_example_docs",
     label=node_name,
     start_index=0,
-    span=10,
+    span=100000,
     offline=False,
     original_cache_dir=None
 )

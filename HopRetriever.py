@@ -645,3 +645,31 @@ if __name__ == "__main__":
     if retriever.driver is not None:
         retriever.driver.close()
         retriever.driver=None 
+
+# if __name__ == "__main__":
+#     query = "alticor's ownership structure"
+
+#     retriever = HopRetriever(
+#         llm=traversal_model,
+#         max_hop=2,
+#         entry_type="node",
+#         if_trim=False,
+#         if_hybrid=False,
+#         topk=3,
+#         traversal="bfs_sim_node",
+#         mock_dense=False,
+#         mock_sparse=False,
+#         reranker=None
+#     )
+
+#     context, scores = retriever.search_docs(query)
+
+#     print("Retrieved contexts with traversal:")
+#     for i, (ctx, score) in enumerate(zip(context, scores)):
+#         print("=" * 80)
+#         print(i, "score:", score)
+#         print(ctx[:500])
+
+#     if retriever.driver is not None:
+#         retriever.driver.close()
+#         retriever.driver = None
