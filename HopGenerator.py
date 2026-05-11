@@ -31,7 +31,8 @@ parser.add_argument('--mock_sparse',action='store_true',default=False)
 parser.add_argument('--mode',default='common',type=str,help='common,reformulate,rerank')
 parser.add_argument('--label',type=str,default='hotpot_example_',help='the label for the output dir, used to distinguish different runs;not for the neo4j index name to retrieve!!')
 parser.add_argument('--topk',default=8,type=int)
-parser.add_argument('--traversal',default='bfs',type=str,help='bfs_node,bfs_hop2,bfs,bfs_sim_node,dfs')
+parser.add_argument('--traversal',default='bfs',type=str,help='bfs_node,bfs_hop2,bfs,bfs_sim_node,dfs,hopq')
+parser.add_argument('--epsilon',default=0.3,type=float,help='explore-exploit balance for hopq (0=exploit,1=explore)')
 parser.add_argument('--retrieve_only',action='store_true', default=False,help='whether to only retrieve the context')
 generate_prompt="""You are a helpful assistant. Please answer my question given the following context. If the context lacks necessary information to answer the question, please try your best to reason and answer in the right format. You have to give an answer no matter what.
 
@@ -60,7 +61,7 @@ class RagPipeline:
         if self.args.retriever_name == "HopRetriever":
             retriever = HopRetriever(llm=self.args.traversal_model,embedding_model=self.args.embedding_model,max_hop=self.args.max_hop,entry_type=self.args.entry_type,if_trim=self.args.trim,
                                      if_hybrid=self.args.hybrid,tol=self.args.tol,mock_dense=self.args.mock_dense,mock_sparse=self.args.mock_sparse,
-                                     topk=self.args.topk,traversal=self.args.traversal,reranker=self.args.rerank_model)
+                                     topk=self.args.topk,traversal=self.args.traversal,reranker=self.args.rerank_model,epsilon=self.args.epsilon)
         else:
             raise ValueError(f"Unknown retriever: {self.args.retriever_name}")
         return retriever

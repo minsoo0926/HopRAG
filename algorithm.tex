@@ -1,0 +1,46 @@
+\documentclass{article}
+\usepackage[ruled,linesnumbered]{algorithm2e}
+\usepackage{xcolor}
+
+\begin{document}
+\begin{algorithm}[H]
+\caption{Graph Traversal Algorithm}
+\KwIn{$q, top_k, n_{hop}, G$}
+\KwOut{$C$}
+
+\SetKwProg{Fn}{Function}{:}{}
+
+\Fn{$\mathrm{RAG}(q, top_k, n_{hop}, G)$}{
+	$\mathbf{v}_q \gets \mathrm{EMB}(q)$\;
+    $k_q \gets \mathrm{NER}(q)$\;
+	$H \gets \mathrm{Retrieve}(\mathbf{v}_q, k_q,G)$\;
+	$H \gets \mathrm{heapify}(H)$, max-heap where key is similarity between $q$ and passage \;
+    $C_{score}[v] \gets$ similarity for each node $v \in H$\;
+	\For{$i \gets 1,2,\dots,n_{hop}$}{
+		\For{$j \gets 1,2,\dots,top_k$}{
+			$v \gets H.\mathrm{deleteMax}()$\;
+			$v', score \gets \mathrm{Hop}(v, q)$\;
+			$H.\mathrm{insert}(v', score)$\;
+			$C_{score}[v'] \gets \max(score, C_{score}[v'])$\;
+		}
+	}
+	$C \gets \mathrm{Prune}(C_{score}, top_k)$\;
+	\Return{$C$}\;
+}
+
+\Fn{$\mathrm{Hop}(v, q)$}{
+	$v_{best} \gets \emptyset$, $s_{best} \gets -\infty$\;
+	\ForEach{$v'\ \mathrm{linked\ to}\ v$}{
+		$exploration \gets$ \textrm{SIM}$(v, v')$\;
+		$exploitation \gets$ \textrm{SIM}$(q, v')$\;
+		$score \gets \epsilon \cdot exploration + (1-\epsilon) \cdot exploitation$\;
+		\If{$score > s_{best}$}{
+			$s_{best} \gets score$\;
+			$v_{best} \gets v'$\;
+		}
+	}
+	\Return{$v_{best}, s_{best}$}\;
+}
+
+\end{algorithm}
+\end{document}

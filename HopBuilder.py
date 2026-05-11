@@ -384,27 +384,32 @@ def main_edges_index(cache_dir='quickstart_dataset/cache_hotpot',problems_path="
         builder.driver=None
 
 if __name__ == "__main__":
-    # for creating nodes, there are two ways: 1. offline and online seperate; 2. offline and online hybrid. the first one recommended.
+    # Step 2 (1): offline — generate pseudo-queries via LLM, save locally (no Neo4j needed)
+    main_nodes(
+        cache_dir='quickstart_dataset/cache_hotpot_offline',
+        docs_dir='quickstart_dataset/hotpot_example_docs',
+        label=node_name,
+        start_index=0,
+        span=100,
+        offline=True
+    )
 
-    # 1. separate mode has two consecutive steps:
-    #   (1) offline mode:first change cuda device and nodename in config.py
-    # main_nodes(cache_dir='quickstart_dataset/cache_hotpot_offline',docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
-    #                start_index=0,span=12000)
+    # Step 2 (2): online — push cached nodes to Neo4j
+    main_nodes(
+        cache_dir='quickstart_dataset/cache_hotpot_online',
+        docs_dir='quickstart_dataset/hotpot_example_docs',
+        label=node_name,
+        start_index=0,
+        span=100,
+        original_cache_dir='quickstart_dataset/cache_hotpot_offline'
+    )
 
-    #   (2) after finishing (1), push offline cache to online neo4j; first change cuda device and nodename in config.py
-    # this step will create new cache_dir (e.g. cache_hotpot_online), feel free to delete original_cache_dir after finishing online indexing
-    # main_nodes(cache_dir='quickstart_dataset/cache_hotpot_online',docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
-    #                start_index=0,span=12000,original_cache_dir='quickstart_dataset/cache_hotpot_offline')  
-    
-    # 2. hybrid mode is an alternative way to create nodes and edges in one step:
-    main_nodes(cache_dir='quickstart_dataset/cache_hotpot_online', docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
-     start_index=0,span=12000,offline=False,original_cache_dir=None)
-
-
-    # for creating edges, it's much eaiser. first make sure creating nodes is finished and change dataset_name,node_name and edge_name in config.py
-    main_edges_index(cache_dir="quickstart_dataset/cache_hotpot_online",
-                     problems_path='quickstart_dataset/hotpot_example.jsonl',
-                     label=node_name)
+    # Step 3: build edges + vector/keyword indices
+    main_edges_index(
+        cache_dir='quickstart_dataset/cache_hotpot_online',
+        problems_path='quickstart_dataset/hotpot_example.jsonl',
+        label=node_name
+    )
     
 
     
