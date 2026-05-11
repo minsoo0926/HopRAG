@@ -67,9 +67,7 @@ class HopQMixin:
                     continue
 
                 # Select next hop neighbors of v using explore-exploit scoring
-                v_best = None
-                s_best = float('-inf')
-
+                neighbors = []
                 result = session.run(expand_logic_query, {'text': v['text']})
                 for record in result:
                     vp = record['logic_node']
@@ -82,19 +80,23 @@ class HopQMixin:
                     exploration = float(np.dot(v_emb, vp_emb) / (v_norm * vp_norm))
                     exploitation = float(np.dot(q_emb, vp_emb) / (q_norm * vp_norm))
                     score = self.epsilon * exploration + (1 - self.epsilon) * exploitation
+                    neighbors.append((score, vp))
 
-                    if score > s_best:
-                        s_best = score
-                        v_best = vp
-
-                if v_best is None:
+                if not neighbors:
                     continue
 
-                text = v_best['text']
-                C_score[text] = max(s_best, C_score.get(text, float('-inf')))
-                if text not in expanded:
-                    heapq.heappush(H, (-s_best, counter, v_best))
-                    counter += 1
+                neighbors.sort(key=lambda x: x[0], reverse=True)
+
+                # Update C_score for all neighbors
+                for score, vp in neighbors:
+                    C_score[vp['text']] = max(score, C_score.get(vp['text'], float('-inf')))
+
+                # Push best unexpanded neighbor (n++ fallback)
+                for score, vp in neighbors:
+                    if vp['text'] not in expanded:
+                        heapq.heappush(H, (-score, counter, vp))
+                        counter += 1
+                        break
 
         logger.info(f"hopq: visited {len(expanded)} nodes, C_score size {len(C_score)}")
         return self.topk_filter(C_score)
