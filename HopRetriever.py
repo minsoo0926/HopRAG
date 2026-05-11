@@ -4,6 +4,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from tool import *
 from config import *
+from HopQStrategy import HopQMixin
 import numpy as np
 from neo4j import GraphDatabase
 import time
@@ -11,8 +12,8 @@ from loguru import logger
 from typing import List, Tuple, Dict, Set, Union
 from collections import defaultdict
 
-class HopRetriever:
-    def __init__(self,llm='gpt-4o-mini',max_hop:int=5,entry_type="edge",if_hybrid=False,if_trim=False,cache_context_path="./context_outcome.json",tol=2,mock_dense=False,mock_sparse=False,topk=10,traversal="bfs",embedding_model=embed_model,reranker=None):
+class HopRetriever(HopQMixin):
+    def __init__(self,llm='gpt-4o-mini',max_hop:int=5,entry_type="edge",if_hybrid=False,if_trim=False,cache_context_path="./context_outcome.json",tol=2,mock_dense=False,mock_sparse=False,topk=10,traversal="bfs",embedding_model=embed_model,reranker=None,epsilon=0.3):
         self.emb_model = load_embed_model(embedding_model)
         self.driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password), database=neo4j_dbname, notifications_disabled_categories=neo4j_notification_filter)
         self.max_hop = max_hop
@@ -26,6 +27,7 @@ class HopRetriever:
         self.reasoning_model = load_language_model(llm)
         self.topk=topk
         self.traversal=traversal
+        self.epsilon = epsilon
         if reranker is not None:
             model,tokenizer=load_rerank_model(reranker)
             self.rerank_model,self.rerank_tokenizer=model,tokenizer
@@ -616,8 +618,10 @@ class HopRetriever:
             return self.search_docs_bfs_node(query)
         elif self.traversal=="bfs_hop2":
             return self.search_docs_bfs_hop2(query)
+        elif self.traversal=="hopq":
+            return self.search_docs_hopq(query)
         else:
-            raise ValueError("traversal type must be 'dfs' or 'bfs' or 'bfs_sim_node' or 'bfs_node' or 'bfs_hop2'")
+            raise ValueError("traversal type must be 'dfs' or 'bfs' or 'bfs_sim_node' or 'bfs_node' or 'bfs_hop2' or 'hopq'")
     
     def search_docs_rerank(self,query:str)->Tuple[List[str],List[float]]:
         context,_ = self.search_docs(query)
