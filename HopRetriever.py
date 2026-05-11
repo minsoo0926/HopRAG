@@ -641,11 +641,11 @@ class HopRetriever(HopQMixin):
                        
 if __name__ == "__main__":
     query="Donnie Smith who plays as a left back for New England Revolution belongs to what league featuring 22 teams?"
-    retriever = HopRetriever(llm=traversal_model,max_hop = 4, entry_type="node",if_trim=False,if_hybrid=True,
-                             tol=30,topk=20,traversal='bfs_hop2',mock_dense=False,reranker=None)# no reranking then reranker=None; else: reranker=reranker
-    context,scores = retriever.search_docs(query)
+    retriever = HopRetriever(llm=traversal_model, max_hop=4, entry_type="node", if_trim=False, if_hybrid=True,
+                             tol=30, topk=10, traversal='hopq', epsilon=0.3, mock_dense=False, reranker=None)
+    context, scores = retriever.search_docs(query)
     print(context)
     print(scores)
     if retriever.driver is not None:
         retriever.driver.close()
-        retriever.driver=None 
+        retriever.driver=None
