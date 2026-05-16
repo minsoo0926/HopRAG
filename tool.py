@@ -13,6 +13,9 @@ from modelscope import AutoModelForCausalLM, AutoTokenizer,AutoModelForSequenceC
 import numpy as np
 from typing import List, Tuple, Dict, Set
 
+_SPACY_NLP = None
+_SPACY_LOAD_ATTEMPTED = False
+
 def sparse_similarity(a:Set, b:Set):
     return len(a.intersection(b))/len(a.union(b))
 
@@ -199,7 +202,7 @@ def get_title_keywords_eng(title_template, doc, query_generator) -> Tuple[str, S
     if len(title) == 0:
         title = "untitled document"
 
-    keywords = get_ner_eng(title)
+    keywords = get_ner_eng(doc)
 
     if len(keywords) == 0:
         keywords = title.replace(",", " ").replace("，", " ").replace("。", " ").replace(".", " ").split()
@@ -301,16 +304,46 @@ Passage:
 #     filtered = list(set(filtered))
 #     return filtered
 
-def get_ner_eng(text):
+def _dedupe_keywords(keywords, max_keywords=20):
+    deduped = []
+    seen = set()
+    for keyword in keywords:
+        keyword = re.sub(r"\s+", " ", str(keyword)).strip(" \t\r\n.,;:()[]{}\"'")
+        if not keyword:
+            continue
+        key = keyword.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(keyword)
+        if len(deduped) >= max_keywords:
+            break
+    return deduped
+
+def _load_spacy_nlp():
+    global _SPACY_NLP, _SPACY_LOAD_ATTEMPTED
+    if _SPACY_LOAD_ATTEMPTED:
+        return _SPACY_NLP
+    _SPACY_LOAD_ATTEMPTED = True
+    try:
+        import spacy
+
+        _SPACY_NLP = spacy.load("en_core_web_sm", disable=["textcat"])
+    except Exception:
+        _SPACY_NLP = None
+    return _SPACY_NLP
+
+def _regex_keywords(text, max_keywords=20):
 
     text = str(text)
     words = re.findall(r"[A-Za-z][A-Za-z0-9'-]+", text)
 
-    # 너무 짧은 단어 제거
     stopwords = {
         "the", "and", "for", "with", "from", "that", "this", "are", "was",
         "were", "his", "her", "its", "into", "about", "after", "before",
-        "which", "what", "when", "where", "who", "how", "why", "has", "had"
+        "which", "what", "when", "where", "who", "how", "why", "has", "had",
+        "have", "not", "but", "you", "your", "their", "they", "them", "than",
+        "then", "there", "here", "also", "other", "such", "only", "more"
     }
 
     keywords = []
@@ -319,7 +352,35 @@ def get_ner_eng(text):
         if len(lw) >= 3 and lw not in stopwords:
             keywords.append(w)
 
-    return keywords[:20]
+    return _dedupe_keywords(keywords, max_keywords=max_keywords)
+
+def get_ner_eng(text):
+    text = str(text)
+    if len(text.strip()) == 0:
+        return []
+
+    nlp = _load_spacy_nlp()
+    if nlp is None:
+        return _regex_keywords(text)
+
+    doc = nlp(text[:3000])
+    entity_labels = {
+        "PERSON", "ORG", "GPE", "LOC", "FAC", "NORP", "PRODUCT",
+        "EVENT", "WORK_OF_ART", "LAW", "LANGUAGE", "DATE"
+    }
+
+    candidates = []
+    candidates.extend(ent.text for ent in doc.ents if ent.label_ in entity_labels)
+    candidates.extend(
+        chunk.text
+        for chunk in doc.noun_chunks
+        if 2 <= len(chunk.text.strip()) <= 80
+    )
+
+    if not candidates:
+        return _regex_keywords(text)
+
+    return _dedupe_keywords(candidates, max_keywords=20)
 
 def load_embed_model(model_name):
     if model_name in embed_model_dict:
@@ -365,14 +426,20 @@ def _get_chat_completion(chat, return_json=True, model=default_gpt_model, max_to
             break
     if type(model)== str and local_deployed:
         client = OpenAI(api_key=current_personal_key, base_url=current_personal_base)
-        chat_completion = client.chat.completions.create(model=model,
-                                                   messages=chat,
-                                                   response_format={"type": "json_object" if return_json else "text"},
-                                                   extra_body={"chat_template_kwargs": {"enable_thinking": False}}, # for qwen3 series
-                                                   max_tokens=max_tokens,
-                                                   temperature=0.1,
-                                                   frequency_penalty=0.0,
-                                                   presence_penalty=0.0)
+        completion_kwargs = {
+            "model": model,
+            "messages": chat,
+            "response_format": {"type": "json_object" if return_json else "text"},
+            "max_tokens": max_tokens,
+            "temperature": 0.1,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+        }
+        if "qwen3" in model.lower():
+            completion_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
+        chat_completion = client.chat.completions.create(**completion_kwargs)
         # print(chat_completion.choices[0].message.content)
         chat = chat + [{"role": "assistant", "content": chat_completion.choices[0].message.content}]
         response = chat_completion.choices[0].message.content
@@ -427,18 +494,29 @@ def _get_chat_completion(chat, return_json=True, model=default_gpt_model, max_to
 def get_chat_completion(chat, return_json=True, model=default_gpt_model, max_tokens=4096, keys=None):
     return try_run(_get_chat_completion, chat, return_json, model, max_tokens, keys)
 
+def _torch_accel_device():
+    if llm_device == "cuda" and torch.cuda.is_available():
+        return "cuda"
+    if llm_device == "mps" and torch.backends.mps.is_available():
+        return "mps"
+    return None
+
 def pending_dot_answerable(pending_df,answerable_df):
     pending=np.array(pending_df['embedding'].tolist())
     answerable=np.array(answerable_df['embedding'].tolist())
-    if torch.cuda.is_available():
-        pending=torch.tensor(pending).cuda()
-        answerable=torch.tensor(answerable).cuda()
+    accel_device = _torch_accel_device()
+    if accel_device is not None:
+        pending=torch.as_tensor(pending, dtype=torch.float32, device=accel_device)
+        answerable=torch.as_tensor(answerable, dtype=torch.float32, device=accel_device)
         dense_similarity=pending.mm(answerable.T).cpu().numpy()
     else:
         dense_similarity=pending.dot(answerable.T)
     outcome=dense_similarity.flatten().tolist()
     del pending,answerable,dense_similarity
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    if hasattr(torch, "mps") and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
     return outcome
 
 def sparse_similarities_df(df)->Dict[Tuple[str,str],float]:

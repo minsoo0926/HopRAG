@@ -1,15 +1,33 @@
+import os
+
+
+def _default_torch_device():
+    env_device = os.getenv("HOPRAG_DEVICE")
+    if env_device:
+        return env_device
+    try:
+        import torch
+
+        if torch.backends.mps.is_available():
+            return "mps"
+        if torch.cuda.is_available():
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
+
+
 neo4j_notification_filter = ["DEPRECATION"]
 exception_log_path = "exception_log.txt"
 embed_model = 'bge_en'
 embed_model_dict = {
     "bge_en": "BAAI/bge-base-en-v1.5",
 }
-# local_model_name = "local_qwen_3_8b" # modelname from locally deployed vllm server
-# embed_dim = 768
-# llm_device='cpu'
-local_model_name = "qwen3:0.6b"   # Ollama model name
 embed_dim = 768
-llm_device = "cpu"
+
+# MacBook/Ollama defaults. Override with HOPRAG_LOCAL_MODEL or HOPRAG_DEVICE if needed.
+local_model_name = os.getenv("HOPRAG_LOCAL_MODEL", "qwen2.5:1.5b-instruct")
+llm_device = _default_torch_device()
 query_generator_model=local_model_name
 traversal_model=local_model_name
 
@@ -18,8 +36,8 @@ max_try_num = 2 # the attempt times for llm calling
 max_thread_num = 1  # Use 1 thread for API access; frequent requests or multiprocessing may cause errors.
 
 dataset_name="hotpot" # hotpot;musique;wiki
-node_name=dataset_name+'_bgeen_qwen1b5' # hotpot_bgeen_qwen1b5
-edge_name="pen2ans_"+node_name # pen2ans_hotpot_bgeen_qwen1b5
+node_name=os.getenv("HOPRAG_NODE_NAME", dataset_name+'_bgeen_qwen2_5_1b5')
+edge_name="pen2ans_"+node_name
 
 generator_label=node_name+'_' # hotpot_bgeen_qwen1b5_
 node_dense_index_name=generator_label+'node_dense_index'
@@ -56,9 +74,9 @@ deployment_sign = {
 
 neo4j_uri = "neo4j://127.0.0.1:7687"
 neo4j_url = neo4j_uri
-neo4j_user = "neo4j"
-neo4j_password = "10451045"
-neo4j_dbname = "neo4j"
+neo4j_user = os.getenv("HOPRAG_NEO4J_USER", "neo4j")
+neo4j_password = os.getenv("HOPRAG_NEO4J_PASSWORD", "10451045")
+neo4j_dbname = os.getenv("HOPRAG_NEO4J_DB", "neo4j")
 print("dataset_name:",dataset_name,"node:",node_name," edge:",edge_name," embed model:",embed_model,"query_generator_model:",query_generator_model,"traversal_model:",traversal_model,"local_model_name:",local_model_name)
 # 'fixed' without summary ensures questions focus on the text itself; 'pending' without summary allows questions to explore other texts.
 
@@ -141,6 +159,59 @@ your format:
 Document:
 {doc_content}
 
+"""
+
+augmentation_bridge_question_prompt = """
+/no_think
+You are building semantic bridge edges for a retrieval graph used in multi-hop question answering.
+
+I will give you a source passage and a target passage. A graph algorithm decided that adding
+a directed bridge from the source passage to the target passage may help retrieval.
+
+Your task is to write exactly one bridge question for this new edge.
+
+Think of the edge as:
+source passage -> bridge question -> target passage
+
+Hard requirements:
+1. The answer to the question MUST be explicitly stated in the target passage.
+2. The question MUST use concrete words from the target passage, such as a real person,
+   organization, place, work title, event, date, number, role, species, station, team, or company.
+3. The question MUST be self-contained. A reader should understand it without seeing either passage.
+4. The question SHOULD be a useful follow-up after reading the source passage, but target-passsage
+   answerability is more important than source-passage coverage.
+5. Use the shared or related topics only if they help create a target-grounded question.
+6. Return only a valid JSON object. Do not include markdown, explanations, or reasoning.
+
+Forbidden:
+- Do not use placeholders such as [name], [person], [company], "he", "she", "it", "this person",
+  "this organization", or "the target passage".
+- Do not ask vague questions such as "What related information connects these passages?"
+- Do not ask a question whose answer is only in the source passage.
+- Do not invent facts, names, dates, or relationships that are not in the target passage.
+- Do not mention "source passage", "target passage", "bridge", "retrieval", or "graph".
+
+Good examples:
+{{"Question":"What business did Jay Van Andel co-found with Richard DeVos?"}}
+{{"Question":"Which Amtrak trains does Jacksonville station serve?"}}
+{{"Question":"Who directed the Cirque du Soleil show Le Reve?"}}
+
+Bad examples:
+{{"Question":"What related information connects these passages?"}}
+{{"Question":"What position did General [name] hold?"}}
+{{"Question":"What did he do after this event?"}}
+
+Output format:
+{{"Question":"<one specific bridge question>"}}
+
+Shared or related topics:
+{shared_keywords}
+
+Source passage:
+{source_text}
+
+Target passage:
+{target_text}
 """
 
 create_entity_query = """

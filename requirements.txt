@@ -10,3 +10,5 @@ paddlenlp
 swifter
 jsonlines
 modelscope
+spacy
+networkx

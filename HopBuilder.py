@@ -25,6 +25,9 @@ class QABuilder:
         self.driver = None # if offline, we don't need to connect to neo4j; we will connect to neo4j when necessary
         self.edges=None # pending2answerable
         self.abstract2chunk=None # pseudo abstract to chunk
+        self.edge_records=[]
+        self.abstract_edge_records=[]
+        self.node_id_mapping={}
         self.done=done
         self.label=label # label is the type of node in neo4j
 
@@ -40,6 +43,10 @@ class QABuilder:
             else:
                 temp=','.join(sentence_list)
             #temp is the chunk in each node(str)
+            chunk_keywords = set(get_ner_eng(temp))
+            effective_keywords = set(list(chunk_keywords)[:12] + list(keywords)[:8])
+            if len(effective_keywords) == 0:
+                effective_keywords = keywords
             sentence_embeddings=get_doc_embeds(temp, self.emb_model)
             questions_dict={}
             question_list_answerable = get_question_list(extract_template_fixed_eng, sentence_list,query_generator=self.query_generator)  
@@ -50,8 +57,8 @@ class QABuilder:
             if len(question_list_pending)==0:
                 return None 
             pending_embeddings=get_doc_embeds(question_list_pending, self.emb_model)
-            questions_dict['answerable']=[(question,keywords,emb) for question,emb in zip(question_list_answerable,answerable_embeddings)]
-            questions_dict['pending']=[(question,keywords,emb) for question,emb in zip(question_list_pending,pending_embeddings)]
+            questions_dict['answerable']=[(question,effective_keywords,emb) for question,emb in zip(question_list_answerable,answerable_embeddings)]
+            questions_dict['pending']=[(question,effective_keywords,emb) for question,emb in zip(question_list_pending,pending_embeddings)]
             return questions_dict,sentence_embeddings,self.label# two types of questions, chunk embedding and label for this node;
         
         title,keywords=get_title_keywords_eng(title_template_eng,doc,query_generator=self.query_generator)
@@ -82,13 +89,15 @@ class QABuilder:
                 outcome[sentence]=(sentence,keywords,result[1],result[0],result[2])
         return outcome 
     
-    def create_nodes(self,docs_dir:str='/path/to/docs')->Tuple[Dict[str,List[int]],Dict[Tuple[int,str],Dict[str,List[Tuple[str,Set,np.ndarray]]]]]:
+    def create_nodes(self,docs_dir:str='/path/to/docs',start_index=0,span=None)->Tuple[Dict[str,List[int]],Dict[Tuple[int,str],Dict[str,List[Tuple[str,Set,np.ndarray]]]]]:
         logger.info(f"!!! starting creating online nodes called {self.label} for docs in {docs_dir}")
         if self.driver is None:
             self.driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password), database=neo4j_dbname, notifications_disabled_categories=neo4j_notification_filter)
         docs_pool=os.listdir(docs_dir)
         # docs_pool = [x for x in docs_pool if x.endswith(".txt")]
         docs_pool = sorted([x for x in docs_pool if x.endswith(".txt")])
+        if span is not None:
+            docs_pool = docs_pool[start_index:start_index+span]
         # docs_pool = [x for x in docs_pool if x.endswith(".txt")]
         # docs_pool = docs_pool[:10]
         print("DEBUG docs_pool size:", len(docs_pool))  
@@ -121,6 +130,7 @@ class QABuilder:
     def create_nodes_offline(self,docs_dir:str='/path/to/docs',start_index=0,span=100)->Tuple[Dict[str,List[int]],Dict[Tuple[int,str],Dict[str,List[Tuple[str,Set,np.ndarray]]]]]:
         logger.info(f" starting creating offline nodes called {self.label} for docs in {docs_dir} from index {start_index} to {start_index+span-1}")
         docs_pool=os.listdir(docs_dir)
+        docs_pool = sorted([x for x in docs_pool if x.endswith(".txt")])
         # docs_pool = docs_pool[:10]
         # print("DEBUG docs_pool size:", len(docs_pool))  
         docid2nodes={}
@@ -162,6 +172,8 @@ class QABuilder:
         cnt=0
         with self.driver.session() as session:
             for doc_id,old_node_ids in old_docid2nodes.items():
+                if doc_id in self.done:
+                    continue
                 if cnt%10==0:
                     logger.info(f'processing doc {doc_id} with {len(old_node_ids)} nodes and {cnt} docs processed so far')
                     time.sleep(1)
@@ -171,15 +183,16 @@ class QABuilder:
                     node,questiondict=old_node2questiondict[(old_node,doc_id)]
                     type=self.label ###
                     node_id=session.run(create_entity_query.format(type=type),{'text':node['text'],'keywords':node['keywords'],'embed':node['embed']}).single()[0] # Add the attributes later when the edges are created
+                    self.node_id_mapping[old_node]=node_id
                     new_node2questiondict[(node_id,doc_id)]=questiondict
                     nodes_id.append(node_id)
                 new_docid2nodes[doc_id]=nodes_id
 
         return new_docid2nodes,new_node2questiondict 
     
-    def create_edge(self,node2questiondict,docid2nodes):
+    def create_edge(self,node2questiondict,docid2nodes,write_edges=True):
         # table:nodeid question_label question_id embedding question keywords
-        if self.driver is None:
+        if write_edges and self.driver is None:
             self.driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password), database=neo4j_dbname, notifications_disabled_categories=neo4j_notification_filter)
         def get_sparse_similarity_transform(group):
             group['sparse_similarity']=sparse_similarities_result[(str(group.iloc[0]['keywords_x']),str(group.iloc[0]['keywords_y']))]
@@ -285,22 +298,45 @@ class QABuilder:
         self.edges=pd.concat([self.edges,cartesian2[['node_id_x','question_y','keywords_both','embedding_x','node_id_y','similarity']]],ignore_index=True) 
         self.edges=self.edges.drop_duplicates(subset=['node_id_x','node_id_y'],keep='first')
         del cartesian2
-        with self.driver.session() as session:
-            for i,row in self.edges.iterrows():
-                session.run(create_pending2answerable,{'id1':row['node_id_x'],'id2':row['node_id_y'],'keywords':sorted(list(row['keywords_both'])),'embed':row['embedding_x'],'answerable_question':row['question_y']})# 【】
+        edge_records = []
+        for i,row in self.edges.iterrows():
+            edge_records.append({
+                'id1':int(row['node_id_x']),
+                'id2':int(row['node_id_y']),
+                'keywords':sorted(list(row['keywords_both'])),
+                'embed':row['embedding_x'],
+                'answerable_question':row['question_y'],
+            })
+        if write_edges:
+            with self.driver.session() as session:
+                for record in edge_records:
+                    session.run(create_pending2answerable,record)# 【】
+        else:
+            self.edge_records.extend(edge_records)
 
         if len(self.abstract2chunk)==0:
             return 
-        with self.driver.session() as session:
-            for i,row in self.abstract2chunk.iterrows():
-                temp_keywords=sorted(list(row['keywords']))
-                doc_id=row['doc_id']
-                abstract_id=docid2nodes[doc_id][0]
-                session.run(create_abstract2answerable,{'abstract_id':abstract_id,'id2':row['node_id'],'keywords':temp_keywords,'embed':row['embedding'],'answerable_question':row['question']})
+        abstract_records = []
+        for i,row in self.abstract2chunk.iterrows():
+            temp_keywords=sorted(list(row['keywords']))
+            doc_id=row['doc_id']
+            abstract_records.append({
+                'abstract_id':int(docid2nodes[doc_id][0]),
+                'id2':int(row['node_id']),
+                'keywords':temp_keywords,
+                'embed':row['embedding'],
+                'answerable_question':row['question'],
+            })
+        if write_edges:
+            with self.driver.session() as session:
+                for record in abstract_records:
+                    session.run(create_abstract2answerable,record)
+        else:
+            self.abstract_edge_records.extend(abstract_records)
 
 
 
-    def create_edges_musique(self,node2questiondict,docid2nodes,problems_path="/path/to/musique/musique_problems.jsonl"):
+    def create_edges_musique(self,node2questiondict,docid2nodes,problems_path="/path/to/musique/musique_problems.jsonl",write_edges=True):
         with open(problems_path,'r', encoding='utf-8') as f:
             problems=[json.loads(line) for line in f]
         id2txt=json.load(open(problems_path.replace('.jsonl','_id2txt.json'),'r')) # this file is created in process_data_musique in data_preprocess.py
@@ -318,13 +354,13 @@ class QABuilder:
             print("DEBUG nodes matched:", len(nodes))
             print("DEBUG node2questiondict matched:", len(node2questiondict_))
             try:
-                self.create_edge(node2questiondict_,docid2nodes_)
+                self.create_edge(node2questiondict_,docid2nodes_,write_edges=write_edges)
                 self.done.add(id)
             except Exception as e:
                 logger.info(f'{id} error {e}')
                 continue
 
-    def create_edges_hotpot(self,node2questiondict,docid2nodes,problems_path="/path/to/hotpotqa/hotpotqa_problems.jsonl"):
+    def create_edges_hotpot(self,node2questiondict,docid2nodes,problems_path="/path/to/hotpotqa/hotpotqa_problems.jsonl",write_edges=True):
         with open(problems_path,'r', encoding='utf-8') as f:
             problems=[json.loads(line) for line in f]
         # problems = problems[:10]
@@ -338,7 +374,7 @@ class QABuilder:
             nodes=[(y,x) for x in docid2nodes_.keys() for y in docid2nodes_[x]]
             node2questiondict_={(y,x):node2questiondict[(y,x)] for (y,x) in nodes} 
             try:
-                self.create_edge(node2questiondict_,docid2nodes_)
+                self.create_edge(node2questiondict_,docid2nodes_,write_edges=write_edges)
                 self.done.add(id)
             except Exception as e:
                 logger.info(f'{id} error {e}')
@@ -379,9 +415,12 @@ def main_nodes(cache_dir='quickstart_dataset/cache_hotpot',docs_dir="quickstart_
         if offline:
             docid2nodes,node2questiondict=builder.create_nodes_offline(docs_dir,start_index=start_index,span=span)
         else:
-            docid2nodes,node2questiondict=builder.create_nodes(docs_dir)
+            docid2nodes,node2questiondict=builder.create_nodes(docs_dir,start_index=start_index,span=span)
     else:
         docid2nodes,node2questiondict=builder.create_nodes_cache(original_cache_dir)###
+        if len(builder.node_id_mapping)>0:
+            with open(f'{cache_dir}/node_id_mapping.pkl','wb') as f:
+                pickle.dump(builder.node_id_mapping,f)
     # print(docid2nodes)#  
     if os.path.exists(f'{cache_dir}/node2questiondict.pkl'):
         with open (f'{cache_dir}/node2questiondict.pkl','rb') as f:
@@ -401,6 +440,89 @@ def main_nodes(cache_dir='quickstart_dataset/cache_hotpot',docs_dir="quickstart_
         builder.driver=None
     end_time=time.time()
     print('time:',end_time-start_time)
+
+def main_edges_offline(cache_dir='quickstart_dataset/cache_hotpot',problems_path="quickstart_dataset/hotpot_example.jsonl",label='hotpot_test'):
+    logger.info(f"!!! starting offline edge cache creation called {edge_name} for node {label}")
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    start_time=time.time()
+    print('start',time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
+    if os.path.exists(f'{cache_dir}/docid2nodes.json'):
+        with open(f'{cache_dir}/docid2nodes.json','r', encoding='utf-8') as f: 
+            docid2nodes = json.load(f)
+    else:
+        docid2nodes={}
+    if os.path.exists(f'{cache_dir}/edges_done.pkl'):
+        with open(f'{cache_dir}/edges_done.pkl','rb') as f:
+            done=pickle.load(f)
+    else:
+        done=set()
+    builder = QABuilder(done=done,label=label)
+    if os.path.exists(f'{cache_dir}/node2questiondict.pkl'):
+        with open (f'{cache_dir}/node2questiondict.pkl','rb') as f:
+            node2questiondict=pickle.load(f)
+    else:
+        node2questiondict={}
+    node2questiondict={
+        key: value[1] if isinstance(value, tuple) and len(value)==2 else value
+        for key,value in node2questiondict.items()
+    }
+    if "musique" in label:
+        builder.create_edges_musique(node2questiondict,docid2nodes,problems_path=problems_path,write_edges=False)
+    else:
+        builder.create_edges_hotpot(node2questiondict,docid2nodes,problems_path=problems_path,write_edges=False)
+    with open(f'{cache_dir}/edges_done.pkl','wb') as f:
+        pickle.dump(builder.done,f)
+    with open(f'{cache_dir}/edge_records.pkl','wb') as f:
+        pickle.dump(builder.edge_records,f)
+    with open(f'{cache_dir}/abstract_edge_records.pkl','wb') as f:
+        pickle.dump(builder.abstract_edge_records,f)
+    end_time=time.time()
+    print('time:',end_time-start_time)
+    print('edge_records:',len(builder.edge_records),'abstract_edge_records:',len(builder.abstract_edge_records))
+
+def main_upload_edges_index(cache_dir='quickstart_dataset/cache_hotpot',offline_edge_cache_dir=None,label='hotpot_test'):
+    logger.info(f"!!! uploading cached edges called {edge_name} for node {label} and then building indexes")
+    if offline_edge_cache_dir is None:
+        offline_edge_cache_dir=cache_dir
+    if os.path.exists(f'{cache_dir}/edges_uploaded.pkl'):
+        logger.info(f"cached edges already uploaded from {cache_dir}; skip relationship upload")
+        builder = QABuilder(done=set(),label=label)
+        builder.create_index()
+        if builder.driver is not None:
+            builder.driver.close()
+            builder.driver=None
+        return
+    with open(f'{cache_dir}/node_id_mapping.pkl','rb') as f:
+        node_id_mapping=pickle.load(f)
+    with open(f'{offline_edge_cache_dir}/edge_records.pkl','rb') as f:
+        edge_records=pickle.load(f)
+    if os.path.exists(f'{offline_edge_cache_dir}/abstract_edge_records.pkl'):
+        with open(f'{offline_edge_cache_dir}/abstract_edge_records.pkl','rb') as f:
+            abstract_edge_records=pickle.load(f)
+    else:
+        abstract_edge_records=[]
+    builder = QABuilder(done=set(),label=label)
+    builder.driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password), database=neo4j_dbname, notifications_disabled_categories=neo4j_notification_filter)
+    start_time=time.time()
+    with builder.driver.session() as session:
+        for record in tqdm(edge_records,desc='upload_cached_edges'):
+            mapped = dict(record)
+            mapped['id1']=node_id_mapping[record['id1']]
+            mapped['id2']=node_id_mapping[record['id2']]
+            session.run(create_pending2answerable,mapped)
+        for record in tqdm(abstract_edge_records,desc='upload_cached_abstract_edges'):
+            mapped = dict(record)
+            mapped['abstract_id']=node_id_mapping[record['abstract_id']]
+            mapped['id2']=node_id_mapping[record['id2']]
+            session.run(create_abstract2answerable,mapped)
+    with open(f'{cache_dir}/edges_uploaded.pkl','wb') as f:
+        pickle.dump({'edge_records':len(edge_records),'abstract_edge_records':len(abstract_edge_records)},f)
+    print('time:',time.time()-start_time)
+    builder.create_index()
+    if builder.driver is not None:
+        builder.driver.close()
+        builder.driver=None
 
 def main_edges_index(cache_dir='quickstart_dataset/cache_hotpot',problems_path="quickstart_dataset/hotpot_example.jsonl",label='hotpot_test'):
     logger.info(f"!!! starting creating edges called {edge_name} for node {label} and then build index called {node_dense_index_name} and {edge_dense_index_name} and {node_sparse_index_name} and {edge_sparse_index_name}")
@@ -441,37 +563,79 @@ def main_edges_index(cache_dir='quickstart_dataset/cache_hotpot',problems_path="
         builder.driver=None
 
 if __name__ == "__main__":
-    # for creating nodes, there are two ways: 1. offline and online seperate; 2. offline and online hybrid. the first one recommended.
+    # Offline-first build flow for local/Mac execution.
+    #
+    # Stages:
+    #   all           : offline nodes -> offline edges -> Neo4j nodes -> Neo4j edges/indexes
+    #   offline       : only create the local node cache
+    #   offline_edges : only create the local edge cache from the offline node cache
+    #   upload        : only push an existing offline node cache to Neo4j
+    #   upload_edges  : only push cached edges to Neo4j and create indexes
+    #   edges         : legacy path; create edges directly from the online cache and indexes
+    #
+    # Example:
+    #   HOPRAG_BUILD_STAGE=offline HOPRAG_BUILD_SPAN=10 python HopBuilder.py
+    #   HOPRAG_BUILD_STAGE=offline_edges python HopBuilder.py
+    #   HOPRAG_BUILD_STAGE=upload python HopBuilder.py
+    #   HOPRAG_BUILD_STAGE=upload_edges python HopBuilder.py
+    docs_dir = os.getenv("HOPRAG_DOCS_DIR", "quickstart_dataset/hotpot_example_docs")
+    problems_path = os.getenv("HOPRAG_PROBLEMS_PATH", "quickstart_dataset/hotpot_example.jsonl")
+    offline_cache_dir = os.getenv("HOPRAG_OFFLINE_CACHE_DIR", "quickstart_dataset/cache_hotpot_offline_qwen2_5")
+    online_cache_dir = os.getenv("HOPRAG_ONLINE_CACHE_DIR", "quickstart_dataset/cache_hotpot_online_qwen2_5")
+    build_stage = os.getenv("HOPRAG_BUILD_STAGE", "all").lower()
+    start_index = int(os.getenv("HOPRAG_BUILD_START_INDEX", "0"))
+    span = int(os.getenv("HOPRAG_BUILD_SPAN", "10"))
 
-    # 1. separate mode has two consecutive steps:
-    #   (1) offline mode:first change cuda device and nodename in config.py
-    # main_nodes(cache_dir='quickstart_dataset/cache_hotpot_offline',docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
-    #                start_index=0,span=12000)
+    if build_stage not in {"all", "offline", "offline_edges", "upload", "upload_edges", "edges"}:
+        raise ValueError("HOPRAG_BUILD_STAGE must be one of: all, offline, offline_edges, upload, upload_edges, edges")
 
-    #   (2) after finishing (1), push offline cache to online neo4j; first change cuda device and nodename in config.py
-    # this step will create new cache_dir (e.g. cache_hotpot_online), feel free to delete original_cache_dir after finishing online indexing
-    # main_nodes(cache_dir='quickstart_dataset/cache_hotpot_online',docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
-    #                start_index=0,span=12000,original_cache_dir='quickstart_dataset/cache_hotpot_offline')  
-    
-    # 2. hybrid mode is an alternative way to create nodes and edges in one step:
-    # main_nodes(cache_dir='quickstart_dataset/cache_hotpot_online', docs_dir="quickstart_dataset/hotpot_example_docs",label=node_name,
-    #  start_index=0,span=10,offline=False,original_cache_dir=None)
-    CACHE_DIR = "quickstart_dataset/cache_hotpot_qwen_edge_full_v3"
+    logger.info(
+        f"HopBuilder offline-first stage={build_stage}, docs_dir={docs_dir}, "
+        f"offline_cache_dir={offline_cache_dir}, online_cache_dir={online_cache_dir}, "
+        f"start_index={start_index}, span={span}, label={node_name}"
+    )
 
-    main_nodes(
-    cache_dir=CACHE_DIR,
-    docs_dir="quickstart_dataset/hotpot_example_docs",
-    label=node_name,
-    start_index=0,
-    span=100000,
-    offline=False,
-    original_cache_dir=None
-)
-    # for creating edges, it's much eaiser. first make sure creating nodes is finished and change dataset_name,node_name and edge_name in config.py
-    main_edges_index(cache_dir=CACHE_DIR,
-                     problems_path='quickstart_dataset/hotpot_example.jsonl',
-                     label=node_name)
-    
+    if build_stage in {"all", "offline"}:
+        main_nodes(
+            cache_dir=offline_cache_dir,
+            docs_dir=docs_dir,
+            label=node_name,
+            start_index=start_index,
+            span=span,
+            offline=True,
+            original_cache_dir=None,
+        )
 
-    
+    if build_stage in {"all", "offline_edges"}:
+        main_edges_offline(
+            cache_dir=offline_cache_dir,
+            problems_path=problems_path,
+            label=node_name,
+        )
+
+    if build_stage in {"all", "upload"}:
+        main_nodes(
+            cache_dir=online_cache_dir,
+            docs_dir=docs_dir,
+            label=node_name,
+            start_index=start_index,
+            span=span,
+            offline=False,
+            original_cache_dir=offline_cache_dir,
+        )
+
+    if build_stage in {"all", "upload_edges"}:
+        main_upload_edges_index(
+            cache_dir=online_cache_dir,
+            offline_edge_cache_dir=offline_cache_dir,
+            label=node_name,
+        )
+
+    if build_stage in {"all", "edges"}:
+        main_edges_index(
+            cache_dir=online_cache_dir,
+            problems_path=problems_path,
+            label=node_name,
+        )
+
 # nohup python HopBuilder.py >> hotpot_builder.txt &

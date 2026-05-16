@@ -1,0 +1,446 @@
+{
+  "summary": {
+    "label": "hotpot_bgeen_qwen2_5_1b5_spacy_qs",
+    "relationship": "pen2ans_hotpot_bgeen_qwen2_5_1b5_spacy_qs",
+    "data": "quickstart_dataset/hotpot_example.jsonl",
+    "limit": 10,
+    "traversal": "bfs_sim_node",
+    "entry_type": "edge",
+    "topk": 5,
+    "max_hop": 2,
+    "evaluated_questions": 10,
+    "questions_with_any_support_hit": 6,
+    "questions_with_all_supports_hit": 1,
+    "support_fact_hit_rate": 0.2692307692307692,
+    "avg_elapsed_seconds": 0.2761626958847046,
+    "total_elapsed_seconds": 2.761626958847046
+  },
+  "results": [
+    {
+      "id": "5ade063d5542995b365fabcd",
+      "question": "Donnie Smith who plays as a left back for New England Revolution belongs to what league featuring 22 teams?",
+      "answer": "Major League Soccer",
+      "retrieved_count": 5,
+      "support_hit_count": 1,
+      "support_required_count": 3,
+      "all_supports_hit": false,
+      "any_support_hit": true,
+      "elapsed_seconds": 1.1755001544952393,
+      "support_hits": [
+        {
+          "title": "Donnie Smith",
+          "sentence_idx": 0,
+          "sentence": "Donald W. \"Donnie\" Smith (born December 7, 1990 in Detroit, Michigan) is an American soccer player who plays as a left back for New England Revolution in Major League Soccer.",
+          "hit": true
+        },
+        {
+          "title": "Major League Soccer",
+          "sentence_idx": 0,
+          "sentence": "Major League Soccer (MLS) is a men's professional soccer league, sanctioned by U.S. Soccer, that represents the sport's highest level in both the United States and Canada.",
+          "hit": false
+        },
+        {
+          "title": "Major League Soccer",
+          "sentence_idx": 2,
+          "sentence": "The league comprises 22 teams—19 in the U.S. and 3 in Canada.",
+          "hit": false
+        }
+      ],
+      "contexts": [
+        "Donald W. \"Donnie\" Smith (born December 7, 1990 in Detroit, Michigan) is an American soccer player who plays as a left back for New England Revolution in Major League Soccer.",
+        "Kareem Smith (born January 18, 1985 in Boston, Massachusetts) is a Trinidadian footballer who plays as a centre back for Colorado Springs Switchbacks in the USL Professional Division and for the Trinidad and Tobago national football team.",
+        " His sports holdings include: the National Football League's New England Patriots, Major League Soccer's New England Revolution and the stadium in which both teams play, Gillette Stadium.",
+        "The 2016 Lamar Hunt U.S. Open Cup Final was played on September 13, 2016, at Toyota Stadium in Frisco, Texas.",
+        " The game was played at Pizza Hut Park in Frisco, Texas on November 13, 2005."
+      ],
+      "scores": [
+        "Relevant and Necessary",
+        "Indirectly Relevant",
+        "Indirectly Relevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant"
+      ]
+    },
+    {
+      "id": "5a907bf05542995651fb5164",
+      "question": "How many miles does the train, which passes through the Amtrak Jacksonville station and shares the track with the Silver Meteor, run?",
+      "answer": "1522",
+      "retrieved_count": 5,
+      "support_hit_count": 1,
+      "support_required_count": 2,
+      "all_supports_hit": false,
+      "any_support_hit": true,
+      "elapsed_seconds": 0.16796612739562988,
+      "support_hits": [
+        {
+          "title": "Jacksonville station",
+          "sentence_idx": 1,
+          "sentence": "It serves the \"Silver Meteor\" and \"Silver Star\" trains as well as the Thruway Motorcoach to Lakeland.",
+          "hit": false
+        },
+        {
+          "title": "Silver Star (Amtrak train)",
+          "sentence_idx": 0,
+          "sentence": "The Silver Star is a 1522 mi passenger train route in the \"Silver Service\" brand operated by Amtrak, running from New York City south to Miami, Florida via the Northeast Corridor to Washington, D.C., then via Richmond, Virginia; Raleigh, North Carolina; Columbia, South Carolina; Savannah, Georgia; Jacksonville, Florida; Orlando, Florida; and Tampa, Florida.",
+          "hit": true
+        }
+      ],
+      "contexts": [
+        "The Silver Star is a 1522 mi passenger train route in the \"Silver Service\" brand operated by Amtrak, running from New York City south to Miami, Florida via the Northeast Corridor to Washington, D.C., then via Richmond, Virginia; Raleigh, North Carolina; Columbia, South Carolina; Savannah, Georgia; Jacksonville, Florida; Orlando, Florida; and Tampa, Florida.",
+        "Jacksonville station is an Amtrak train station in Jacksonville, Florida, United States.",
+        " The station serves the Fredericksburg Line and shares the right-of-way with Amtrak's \"Northeast Regional\", \"Silver Meteor\", \"Silver Star\", \"Palmetto\", \"Auto Train\", \"Carolinian\" and \"Piedmont\" trains.",
+        " The station serves the Fredericksburg Line and shares the right-of-way with Amtrak's \"Northeast Regional\", \"Silver Meteor\", \"Silver Star\", \"Auto Train\", \"Palmetto\", \"Carolinian\" and \"Piedmont\" trains; however, no Amtrak trains stop here.",
+        " The train is part of Amtrak's \"Silver Service\" along with the \"Silver Star\", another former SAL streamliner."
+      ],
+      "scores": [
+        "Relevant and Necessary",
+        "Relevant and Necessary",
+        "Indirectly Relevant",
+        "Indirectly Relevant",
+        "Indirectly Relevant"
+      ]
+    },
+    {
+      "id": "5ae238375542994d89d5b39a",
+      "question": "Which former American football player had a part in the movie \"Gamer?\"",
+      "answer": "Terry Crews",
+      "retrieved_count": 5,
+      "support_hit_count": 0,
+      "support_required_count": 2,
+      "all_supports_hit": false,
+      "any_support_hit": false,
+      "elapsed_seconds": 0.2799808979034424,
+      "support_hits": [
+        {
+          "title": "Gamer (film)",
+          "sentence_idx": 2,
+          "sentence": "Alongside Butler and Lerman, it also stars Michael C. Hall, Ludacris, Amber Valletta, Terry Crews, Alison Lohman, John Leguizamo, and Zoë Bell.",
+          "hit": false
+        },
+        {
+          "title": "Terry Crews",
+          "sentence_idx": 0,
+          "sentence": "Terry Alan Crews (born July 30, 1968) is an American actor, artist, and former American football player.",
+          "hit": false
+        }
+      ],
+      "contexts": [
+        " After finishing school at Vanderbilt, he went on to be a professional American football player, safety in the National Football League.",
+        " He played college football at Wisconsin.",
+        " He played college football at Southern Methodist University (SMU).",
+        " He is a former American football center and guard who played for two seasons in the National Football League (NFL).",
+        " He played four seasons for the Pittsburgh Steelers and the Jacksonville Jaguars."
+      ],
+      "scores": [
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant"
+      ]
+    },
+    {
+      "id": "5ae5be02554299546bf82f3e",
+      "question": "Who is the Chief Executive Officer of the corporation that owns Space Dev?",
+      "answer": "Fatih Ozmen",
+      "retrieved_count": 5,
+      "support_hit_count": 0,
+      "support_required_count": 2,
+      "all_supports_hit": false,
+      "any_support_hit": false,
+      "elapsed_seconds": 0.26613879203796387,
+      "support_hits": [
+        {
+          "title": "SpaceDev",
+          "sentence_idx": 0,
+          "sentence": "SpaceDev, a part of the \"Space Systems Business\" of Sierra Nevada Corporation, is prominent for its spaceflight and microsatellite work.",
+          "hit": false
+        },
+        {
+          "title": "Sierra Nevada Corporation",
+          "sentence_idx": 1,
+          "sentence": "Sierra Nevada Corporation operates under the leadership of Chief Executive Officer, Fatih Ozmen and President, Eren Ozmen.",
+          "hit": false
+        }
+      ],
+      "contexts": [
+        "Mike Lunsford is the chief executive officer of SK Planet, Inc., the U.S. arm of SK Planet, Ltd., a Korean-based company.",
+        " He is the former executive vice president and interim chief executive officer of RealNetworks, the former chief executive officer of Rhapsody, a joint venture between RealNetworks and Viacom, and the former president and interim chief executive officer of Earthlink.",
+        "Jonathan Ornstein is Chairman and Chief Executive Officer of Mesa Air Group, Inc., and was appointed effective May 1, 1998.",
+        " He was Chairman of the Board and Chief Executive Officer from 1990 until March 1998 of Public Storage Properties XI, Inc., which was renamed PS Business Parks, Inc. (\"PSB\"), an affiliated REIT.",
+        " It designed and built components for the hybrid rocket motors for Paul Allen's Tier One suborbital SpaceShipOne space program operated by Scaled Composites."
+      ],
+      "scores": [
+        "Indirectly Relevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant"
+      ]
+    },
+    {
+      "id": "5a90a9a45542990a9849367e",
+      "question": "Which species is the most numerous, Podocarpus or Osmunda? ",
+      "answer": "Podocarpus",
+      "retrieved_count": 5,
+      "support_hit_count": 0,
+      "support_required_count": 4,
+      "all_supports_hit": false,
+      "any_support_hit": false,
+      "elapsed_seconds": 0.14538288116455078,
+      "support_hits": [
+        {
+          "title": "Podocarpus",
+          "sentence_idx": 0,
+          "sentence": "Podocarpus ( ) is a genus of conifers, the most numerous and widely distributed of the podocarp family, Podocarpaceae.",
+          "hit": false
+        },
+        {
+          "title": "Podocarpus",
+          "sentence_idx": 1,
+          "sentence": "\"Podocarpus\" are evergreen shrubs or trees, usually from 1 to tall, known to reach 40 m at times.",
+          "hit": false
+        },
+        {
+          "title": "Podocarpus",
+          "sentence_idx": 4,
+          "sentence": "There are approximately 97 to 107 species in the genus depending on the circumscription of the species.",
+          "hit": false
+        },
+        {
+          "title": "Osmunda",
+          "sentence_idx": 1,
+          "sentence": "Five to ten species have been listed for this genus.",
+          "hit": false
+        }
+      ],
+      "contexts": [
+        "Osmunda is a genus of primarily temperate-zone ferns of family Osmundaceae.",
+        "Osmunda mildei is a rare fern, known only from a few locations in the area of Hong Kong.",
+        " It is also a rarity in that it appears to be a species of hybrid origin within the Osmundaceae.",
+        " The term may also refer to other similar species in the genus \"Podocarpus\":",
+        "Osmunda spectabilis is a species of fern once thought to be the same as \"Osmunda regalis\", but recent genetic studies have shown it to be a separate species."
+      ],
+      "scores": [
+        "Relevant and Necessary",
+        "Indirectly Relevant",
+        "Indirectly Relevant",
+        "Indirectly Relevant",
+        "Indirectly Relevant"
+      ]
+    },
+    {
+      "id": "5ae0d9c555429924de1b719a",
+      "question": "Van Andel Institute was founded in part by what American businessman, who was best known as co-founder of the Amway Corporation?",
+      "answer": "Jay Van Andel",
+      "retrieved_count": 5,
+      "support_hit_count": 1,
+      "support_required_count": 2,
+      "all_supports_hit": false,
+      "any_support_hit": true,
+      "elapsed_seconds": 0.1414189338684082,
+      "support_hits": [
+        {
+          "title": "Van Andel Institute",
+          "sentence_idx": 1,
+          "sentence": "VAI was founded by Jay and Betty Van Andel in 1996 and is composed of two institutes: Van Andel Research Institute (VARI) and Van Andel Education Institute (VAEI).",
+          "hit": false
+        },
+        {
+          "title": "Jay Van Andel",
+          "sentence_idx": 0,
+          "sentence": "Jay Van Andel (June 3, 1924 – December 7, 2004) was an American businessman, best known as co-founder of the Amway Corporation, along with Richard DeVos.",
+          "hit": true
+        }
+      ],
+      "contexts": [
+        "Richard Marvin DeVos Sr. (born March 4, 1926) is an American businessman, co-founder of Amway along with Jay Van Andel (company restructured as Alticor in 2000), and owner of the Orlando Magic NBA basketball team.",
+        "Jay Van Andel (June 3, 1924 – December 7, 2004) was an American businessman, best known as co-founder of the Amway Corporation, along with Richard DeVos.",
+        "Van Andel Institute (VAI) is a 501(c)(3) nonprofit medical research institute in Grand Rapids, Michigan.",
+        " DeVos is the youngest son of Helen June (Van Wesep) and Amway co-founder Rich DeVos, who, with Steve’s father Jay Van Andel, started Amway in Ada, Michigan, in 1959.",
+        " It was started in 1996 with the founding of Van Andel Institute by Jay and Betty Van Andel."
+      ],
+      "scores": [
+        "Relevant and Necessary",
+        "Relevant and Necessary",
+        "Indirectly Relevant",
+        "Indirectly Relevant",
+        "Indirectly Relevant"
+      ]
+    },
+    {
+      "id": "5ae0e5655542990adbacf6b8",
+      "question": "What country is both Thornton–Cleveleys railway station and Poulton-le-Fylde railway station located?",
+      "answer": "England",
+      "retrieved_count": 5,
+      "support_hit_count": 2,
+      "support_required_count": 2,
+      "all_supports_hit": true,
+      "any_support_hit": true,
+      "elapsed_seconds": 0.13363409042358398,
+      "support_hits": [
+        {
+          "title": "Thornton–Cleveleys railway station",
+          "sentence_idx": 1,
+          "sentence": "Located on the now disused line between Poulton-le-Fylde and Fleetwood , the station also had a shunting yard for the making-up of freight trains for Preston and beyond.",
+          "hit": true
+        },
+        {
+          "title": "Poulton-le-Fylde railway station",
+          "sentence_idx": 0,
+          "sentence": "Poulton-le-Fylde railway station serves the town of Poulton-le-Fylde in Lancashire, England.",
+          "hit": true
+        }
+      ],
+      "contexts": [
+        "Poulton-le-Fylde railway station serves the town of Poulton-le-Fylde in Lancashire, England.",
+        "Thornton–Cleveleys (originally simply-named Cleveleys) was a small-sized railway station which served the two English Lancashire towns of Thornton and Cleveleys, but was situated in the centre of Thornton.",
+        " During its life it was also known at times as Thornton station and Thornton for Cleveleys station.",
+        " Originally, the station was built 300 metres from the present-day location, near a curve.",
+        " Located on the now disused line between Poulton-le-Fylde and Fleetwood , the station also had a shunting yard for the making-up of freight trains for Preston and beyond."
+      ],
+      "scores": [
+        "Relevant and Necessary",
+        "Relevant and Necessary",
+        "Indirectly Relevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant"
+      ]
+    },
+    {
+      "id": "5a7b443c5542992d025e67ce",
+      "question": "Who was the director behind the Cirque du Soleil show in Las Vegas that was first performed on December 25, 1993?",
+      "answer": "Franco Dragone",
+      "retrieved_count": 5,
+      "support_hit_count": 1,
+      "support_required_count": 4,
+      "all_supports_hit": false,
+      "any_support_hit": true,
+      "elapsed_seconds": 0.15123796463012695,
+      "support_hits": [
+        {
+          "title": "Le Rêve (show)",
+          "sentence_idx": 2,
+          "sentence": "The production was created by Franco Dragone and is similar to the shows produced by Cirque du Soleil.",
+          "hit": true
+        },
+        {
+          "title": "Le Rêve (show)",
+          "sentence_idx": 3,
+          "sentence": "Dragone, who was the director behind \"O\", \"La Nouba\", \"Mystère\", \"Alegría\", and \"Quidam\", has not revealed the cost of the production.",
+          "hit": false
+        },
+        {
+          "title": "Mystère (Cirque du Soleil)",
+          "sentence_idx": 0,
+          "sentence": "Mystère is a Cirque du Soleil show in permanent residence at the Treasure Island Hotel and Casino in Las Vegas, Nevada, United States.",
+          "hit": false
+        },
+        {
+          "title": "Mystère (Cirque du Soleil)",
+          "sentence_idx": 2,
+          "sentence": "\"Mystère\" was first performed on December 25, 1993 and quickly won over audiences with its unique style of circus entertainment.",
+          "hit": false
+        }
+      ],
+      "contexts": [
+        " Cirque du Soleil partnered with Elvis Presley Enterprises to produce this show, similar to how they partnered with The Beatles' Apple Corps Ltd to produce the resident show \"Love\" at the Mirage.",
+        " The CD tracks are rearranged and extended versions of songs heard in the show, and in fact the album includes two instrumental versions of the songs \"Memories\" and \"You'll Never Walk Alone\", neither of which is in the Cirque du Soleil show.",
+        "Viva Elvis is the soundtrack remix album of the Cirque du Soleil show \"Viva Elvis\", which focuses on the life and music of American singer and musician Elvis Presley.",
+        " It is a theatrical production created in partnership of Cirque du Soleil and magician Criss Angel, who is billed as the \"co-writer, illusions creator and designer, original concept creator and star\" of the show.",
+        " The production was created by Franco Dragone and is similar to the shows produced by Cirque du Soleil."
+      ],
+      "scores": [
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant"
+      ]
+    },
+    {
+      "id": "5ae2bba35542992decbdcd89",
+      "question": "Which Beatles movie did the John's Children's  studio album Orgasm dub audience screams from?",
+      "answer": "A Hard Day's Night",
+      "retrieved_count": 5,
+      "support_hit_count": 1,
+      "support_required_count": 3,
+      "all_supports_hit": false,
+      "any_support_hit": true,
+      "elapsed_seconds": 0.15549325942993164,
+      "support_hits": [
+        {
+          "title": "Orgasm (John's Children album)",
+          "sentence_idx": 0,
+          "sentence": "Orgasm is John's Children's sole studio album, projected for release on 18 March 1967, and eventually released in September 1970.",
+          "hit": false
+        },
+        {
+          "title": "Orgasm (John's Children album)",
+          "sentence_idx": 2,
+          "sentence": "Originally intended as a regular studio album, it was transformed into a fake \"live\" album by producer Simon Napier-Bell by dubbing audience screams lifted from The Beatles' movie \"A Hard Day's Night\".",
+          "hit": false
+        },
+        {
+          "title": "A Hard Day's Night (film)",
+          "sentence_idx": 0,
+          "sentence": "A Hard Day's Night is a 1964 British musical comedy film directed by Richard Lester and starring the Beatles—John Lennon, Paul McCartney, George Harrison, and Ringo Starr—during the height of Beatlemania.",
+          "hit": true
+        }
+      ],
+      "contexts": [
+        "A Hard Day's Night is a 1964 British musical comedy film directed by Richard Lester and starring the Beatles—John Lennon, Paul McCartney, George Harrison, and Ringo Starr—during the height of Beatlemania.",
+        " It was recorded (before Marc Bolan joined the band) at Advison Studios in London, England.",
+        " Both discs were released on March 7, 2006.",
+        " \"In the Beginning (Circa 1960)\" was also the only Beatles album not owned by EMI though Universal's purchase of Polydor and the Beatles' main catalogue put them under the same ownership.",
+        " This album was originally released as \"The Beatles' First\" in Germany in 1964 and in the United Kingdom in 1967."
+      ],
+      "scores": [
+        "Indirectly Relevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant"
+      ]
+    },
+    {
+      "id": "5ab874ba5542990e739ec904",
+      "question": "The Twelfth United States Army Group commander was the first chairman of what?",
+      "answer": "Joint Chiefs of Staff",
+      "retrieved_count": 5,
+      "support_hit_count": 0,
+      "support_required_count": 2,
+      "all_supports_hit": false,
+      "any_support_hit": false,
+      "elapsed_seconds": 0.14446496963500977,
+      "support_hits": [
+        {
+          "title": "Twelfth United States Army Group",
+          "sentence_idx": 2,
+          "sentence": "It was commanded by General Omar Bradley with its headquarters established in London on 14 July 1944.",
+          "hit": false
+        },
+        {
+          "title": "Omar Bradley",
+          "sentence_idx": 1,
+          "sentence": "Bradley was the first Chairman of the Joint Chiefs of Staff and oversaw the U.S. military's policy-making in the Korean War.",
+          "hit": false
+        }
+      ],
+      "contexts": [
+        "The Twelfth United States Army Group was the largest and most powerful United States Army formation ever to take to the field.",
+        "The Sixth United States Army Group was an Allied Army Group that fought in the European Theater of Operations during World War II.",
+        " It controlled the majority of American forces on the Western Front in 1944 and 1945.",
+        " The offensive was led by the Seventh and Third armies of the United States along with the First Army of France.",
+        " The VI Corps of the Seventh Army linked up with the US Fifth Army, which fought through Italy, in the Alps as the Third Army advanced into Austria and Czechoslovakia, where it linked up with Soviet forces advancing from the east."
+      ],
+      "scores": [
+        "Indirectly Relevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant",
+        "Completely Irrelevant"
+      ]
+    }
+  ]
+}
